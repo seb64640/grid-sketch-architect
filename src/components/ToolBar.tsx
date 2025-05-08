@@ -128,7 +128,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       <Button
         size="sm"
         variant="outline"
-        onClick={undoAction}
+        onClick={() => undoAction()}
         className="h-9 w-9 p-0"
         title="Annuler (Ctrl+Z)"
       >
@@ -138,7 +138,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       <Button
         size="sm"
         variant="outline"
-        onClick={redoAction}
+        onClick={() => redoAction()}
         className="h-9 w-9 p-0"
         title="Rétablir (Ctrl+Y)"
       >
@@ -172,7 +172,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       <Button
         size="sm"
         variant="outline"
-        onClick={() => clearCanvas()}
+        onClick={clearCanvas}
         className="h-9"
         title="Effacer tout"
       >
@@ -182,7 +182,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       <Button
         size="sm"
         variant="outline"
-        onClick={() => printMode()}
+        onClick={printMode}
         className="h-9"
         title="Vue impression"
       >

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -175,7 +176,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Perform undo action
   const performUndo = () => {
-    if (!fabricCanvasRef.current || historyIndexRef.current < 0) return;
+    if (!fabricCanvasRef.current || historyIndexRef.current < 0) {
+      toast("Rien à annuler");
+      return;
+    }
     
     const canvas = fabricCanvasRef.current;
     const action = historyRef.current[historyIndexRef.current];
@@ -186,19 +190,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (action.type === 'add') {
         // Undo an addition by removing the objects
         action.objects.forEach(obj => {
-          const canvasObject = canvas.getObjects().find(o => o === obj);
-          if (canvasObject) {
-            canvas.remove(canvasObject);
-          }
+          canvas.remove(obj);
         });
+        toast("Action annulée");
       } else if (action.type === 'remove') {
         // Undo a removal by adding the objects back
         action.objects.forEach(obj => {
           canvas.add(obj);
         });
+        toast("Suppression annulée");
       } else if (action.type === 'modify') {
-        // Undo a modification would require storing previous state
-        // This is a simplified implementation
+        // For modify actions, we need to restore previous state
+        // This is simplified but could be enhanced with object state snapshots
         toast("Modification annulée");
       }
       
@@ -206,7 +209,6 @@ export const Canvas: React.FC<CanvasProps> = ({
       historyIndexRef.current--;
       
       canvas.requestRenderAll();
-      onUndo();
     } finally {
       isHistoryActionRef.current = false;
     }
@@ -214,7 +216,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Perform redo action
   const performRedo = () => {
-    if (!fabricCanvasRef.current || historyIndexRef.current >= historyRef.current.length - 1) return;
+    if (!fabricCanvasRef.current || historyIndexRef.current >= historyRef.current.length - 1) {
+      toast("Rien à rétablir");
+      return;
+    }
     
     // Increment the history index
     historyIndexRef.current++;
@@ -230,6 +235,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         action.objects.forEach(obj => {
           canvas.add(obj);
         });
+        toast("Action rétablie");
       } else if (action.type === 'remove') {
         // Redo a removal by removing the objects
         action.objects.forEach(obj => {
@@ -238,24 +244,26 @@ export const Canvas: React.FC<CanvasProps> = ({
             canvas.remove(canvasObject);
           }
         });
+        toast("Suppression rétablie");
       } else if (action.type === 'modify') {
-        // Redo a modification would require storing next state
-        // This is a simplified implementation
+        // For modify actions, we would need the next state
         toast("Modification rétablie");
       }
       
       canvas.requestRenderAll();
-      onRedo();
     } finally {
       isHistoryActionRef.current = false;
     }
   };
 
-  // Export the undo/redo functions for toolbar use
+  // Make undo/redo functions available to parent components
   useEffect(() => {
-    // These need to be direct references to the functions
-    onUndo = performUndo;
-    onRedo = performRedo;
+    if (typeof onUndo === 'function') {
+      onUndo = () => performUndo();
+    }
+    if (typeof onRedo === 'function') {
+      onRedo = () => performRedo();
+    }
   }, [onUndo, onRedo]);
 
   // Update selection mode based on activeTool
