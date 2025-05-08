@@ -275,6 +275,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       case "line":
       case "circle":
       case "rectangle":
+      case "arrow":
         canvas.defaultCursor = "crosshair";
         break;
       case "text":
@@ -306,6 +307,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       setupTextTool(canvas);
     } else if (activeTool === "erase") {
       setupEraseTool(canvas);
+    } else if (activeTool === "arrow") {
+      setupArrowTool(canvas);
     }
 
     canvas.requestRenderAll();
@@ -759,30 +762,202 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
   };
 
-  // Erase tool setup - Fixed to properly detect and remove objects
+  // Erase tool setup - Improved to work with whole shapes
   const setupEraseTool = (canvas: fabric.Canvas) => {
     canvas.on("mouse:down", (o) => {
-      if (!o.target) return; // No object was clicked
+      const pointer = canvas.getPointer(o.e);
       
-      const objectToRemove = o.target;
+      // Find object under pointer - check all objects in the canvas
+      const objects = canvas.getObjects();
+      let objectToRemove = null;
       
-      // Skip grid
-      if (gridRef.current && (gridRef.current === objectToRemove || 
-          (gridRef.current.contains && gridRef.current.contains(objectToRemove)))) {
+      // Get the topmost object that contains the point
+      for (let i = objects.length - 1; i >= 0; i--) {
+        const obj = objects[i];
+        
+        // Skip grid
+        if (gridRef.current === obj || (gridRef.current && gridRef.current.contains && gridRef.current.contains(obj))) {
+          continue;
+        }
+        
+        // Skip temporary point
+        if (tempPointRef.current === obj) {
+          continue;
+        }
+        
+        // Check if object contains the clicked point or if it's close to a line or shape
+        if (isPointInOrNearObject(obj, pointer)) {
+          objectToRemove = obj;
+          break;
+        }
+      }
+      
+      if (objectToRemove) {
+        // Save state before removing
+        saveHistoryState([objectToRemove], 'remove');
+        
+        canvas.remove(objectToRemove);
+        canvas.requestRenderAll();
+        toast("Objet supprimé");
+      }
+    });
+  };
+
+  // Helper function to check if a point is in or near an object
+  const isPointInOrNearObject = (obj: fabric.Object, point: { x: number, y: number }): boolean => {
+    // Standard containment check
+    if (obj.containsPoint(point)) {
+      return true;
+    }
+    
+    // Special handling for lines - check proximity
+    if (obj instanceof fabric.Line) {
+      const threshold = 10; // Pixel distance for considering "near" a line
+      
+      const x1 = obj.x1 || 0;
+      const y1 = obj.y1 || 0;
+      const x2 = obj.x2 || 0;
+      const y2 = obj.y2 || 0;
+      
+      // Calculate the distance from point to line segment
+      const A = point.x - x1;
+      const B = point.y - y1;
+      const C = x2 - x1;
+      const D = y2 - y1;
+      
+      const dot = A * C + B * D;
+      const lenSq = C * C + D * D;
+      let param = -1;
+      
+      if (lenSq !== 0) {
+        param = dot / lenSq;
+      }
+      
+      let xx, yy;
+      
+      if (param < 0) {
+        xx = x1;
+        yy = y1;
+      } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+      } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+      }
+      
+      const dx = point.x - xx;
+      const dy = point.y - yy;
+      
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      return distance < threshold;
+    }
+    
+    // For other shapes (rectangles, circles), try bounding box with padding
+    const boundingRect = obj.getBoundingRect();
+    if (boundingRect) {
+      const padding = 5; // Extra padding around the shape
+      return point.x >= boundingRect.left - padding && 
+             point.x <= boundingRect.left + boundingRect.width + padding &&
+             point.y >= boundingRect.top - padding && 
+             point.y <= boundingRect.top + boundingRect.height + padding;
+    }
+    
+    return false;
+  };
+  
+  // New Arrow tool setup
+  const setupArrowTool = (canvas: fabric.Canvas) => {
+    canvas.on("mouse:down", (o) => {
+      // First, check if we clicked on a line
+      if (!o.target || !(o.target instanceof fabric.Line)) {
+        toast("Veuillez cliquer sur une ligne pour ajouter une flèche");
         return;
       }
       
-      // Skip temporary point
-      if (tempPointRef.current === objectToRemove) {
-        return;
-      }
+      const line = o.target as fabric.Line;
+      const pointer = canvas.getPointer(o.e);
       
-      // Save state before removing
-      saveHistoryState([objectToRemove], 'remove');
+      // Get line coordinates
+      const x1 = line.x1 || 0;
+      const y1 = line.y1 || 0;
+      const x2 = line.x2 || 0;
+      const y2 = line.y2 || 0;
       
-      canvas.remove(objectToRemove);
+      // Calculate line direction vector
+      const lineVectorX = x2 - x1;
+      const lineVectorY = y2 - y1;
+      const lineLength = Math.sqrt(lineVectorX * lineVectorX + lineVectorY * lineVectorY);
+      
+      if (lineLength === 0) return; // Prevent division by zero
+      
+      // Normalize the line vector
+      const normalizedLineVectorX = lineVectorX / lineLength;
+      const normalizedLineVectorY = lineVectorY / lineLength;
+      
+      // Calculate perpendicular vector (rotate 90 degrees)
+      const perpVectorX = -normalizedLineVectorY;
+      const perpVectorY = normalizedLineVectorX;
+      
+      // Find the closest point on the line to the click point
+      const dx = pointer.x - x1;
+      const dy = pointer.y - y1;
+      const t = (dx * lineVectorX + dy * lineVectorY) / (lineLength * lineLength);
+      const clampedT = Math.max(0, Math.min(1, t)); // Clamp to [0, 1]
+      
+      // Calculate the closest point on the line
+      const closestX = x1 + clampedT * lineVectorX;
+      const closestY = y1 + clampedT * lineVectorY;
+      
+      // Calculate which side of the line the click is on
+      const cross = (pointer.x - x1) * (y2 - y1) - (pointer.y - y1) * (x2 - x1);
+      const direction = Math.sign(cross);
+      
+      // Calculate arrow start point (on the line)
+      const startX = closestX;
+      const startY = closestY;
+      
+      // Calculate arrow end point (perpendicular to the line)
+      const arrowLength = 40; // Length of the arrow
+      const endX = startX + direction * perpVectorX * arrowLength;
+      const endY = startY + direction * perpVectorY * arrowLength;
+      
+      // Create the arrow line
+      const arrowLine = new fabric.Line([startX, startY, endX, endY], {
+        stroke: strokeColor,
+        strokeWidth: strokeWidth,
+        selectable: true,
+      });
+      
+      // Calculate the position for the arrowhead
+      const arrowHeadSize = 10;
+      const headAngle = Math.atan2(endY - startY, endX - startX);
+      
+      // Create the arrowhead using a small triangle
+      const arrowHead = new fabric.Triangle({
+        left: endX,
+        top: endY,
+        width: arrowHeadSize,
+        height: arrowHeadSize,
+        fill: strokeColor,
+        stroke: strokeColor,
+        strokeWidth: 1,
+        angle: (headAngle * 180 / Math.PI) + 90,
+        originX: 'center',
+        originY: 'center',
+        selectable: true,
+      });
+      
+      // Group the arrow line and arrowhead together
+      const arrow = new fabric.Group([arrowLine, arrowHead], {
+        selectable: true,
+        evented: true,
+      });
+      
+      canvas.add(arrow);
       canvas.requestRenderAll();
-      toast("Objet supprimé");
+      toast("Flèche ajoutée");
     });
   };
 

@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,7 +11,8 @@ import {
   CircleDashed,
   SquareDashed,
   Undo2,
-  Redo2
+  Redo2,
+  ArrowUpRight
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
@@ -22,7 +24,8 @@ export type Tool =
   | "text" 
   | "erase" 
   | "move" 
-  | "grid";
+  | "grid"
+  | "arrow";
 
 interface ToolBarProps {
   activeTool: Tool;
@@ -69,6 +72,16 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         title="Ligne (L)"
       >
         <MoveHorizontal size={18} />
+      </Button>
+      
+      <Button
+        size="sm"
+        variant={activeTool === "arrow" ? "default" : "outline"}
+        onClick={() => setActiveTool("arrow")}
+        className="h-9 w-9 p-0"
+        title="Flèche (F)"
+      >
+        <ArrowUpRight size={18} />
       </Button>
       
       <Button
