@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -80,10 +79,14 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     fabricCanvasRef.current = canvas;
     
-    // Initialize the layer objects map
-    layers.forEach(layer => {
-      layerObjectsMap.current.set(layer.id, []);
-    });
+    // Initialize the layer objects map with empty arrays for each layer
+    if (layers && layers.length > 0) {
+      layers.forEach(layer => {
+        if (!layerObjectsMap.current.has(layer.id)) {
+          layerObjectsMap.current.set(layer.id, []);
+        }
+      });
+    }
 
     // Add key event listeners
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -162,7 +165,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       setLayers(prevLayers => 
         prevLayers.map(layer => 
           layer.id === activeLayerId 
-            ? { ...layer, objects: [...layer.objects, e.target] } 
+            ? { ...layer, objects: [...(layer.objects || []), e.target] } 
             : layer
         )
       );
@@ -213,27 +216,31 @@ export const Canvas: React.FC<CanvasProps> = ({
     const canvas = fabricCanvasRef.current;
     
     // Update visibility of objects based on layer visibility
-    layers.forEach(layer => {
-      const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-      
-      layerObjects.forEach(obj => {
-        // Skip if object no longer exists
-        if (!obj || !obj.canvas) return;
+    if (layers && layers.length > 0) {
+      layers.forEach(layer => {
+        if (!layer) return;
         
-        // Update visibility based on layer visibility
-        obj.visible = layer.visible;
+        const layerObjects = layerObjectsMap.current.get(layer.id) || [];
         
-        // Update interactivity based on layer lock status and active layer
-        if (layer.locked || layer.id !== activeLayerId) {
-          obj.selectable = false;
-          obj.evented = false;
-        } else {
-          // Only make selectable if not in a drawing tool mode
-          obj.selectable = activeTool === "select";
-          obj.evented = activeTool === "select";
-        }
+        layerObjects.forEach(obj => {
+          // Skip if object no longer exists
+          if (!obj || !obj.canvas) return;
+          
+          // Update visibility based on layer visibility
+          obj.visible = layer.visible;
+          
+          // Update interactivity based on layer lock status and active layer
+          if (layer.locked || layer.id !== activeLayerId) {
+            obj.selectable = false;
+            obj.evented = false;
+          } else {
+            // Only make selectable if not in a drawing tool mode
+            obj.selectable = activeTool === "select";
+            obj.evented = activeTool === "select";
+          }
+        });
       });
-    });
+    }
     
     canvas.requestRenderAll();
     
@@ -284,7 +291,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           setLayers(prevLayers => 
             prevLayers.map(layer => 
               layer.id === action.layerId 
-                ? { ...layer, objects: layer.objects.filter((_, idx) => idx !== layerObjects.indexOf(obj)) } 
+                ? { ...layer, objects: (layer.objects || []).filter((_, idx) => idx !== layerObjects.indexOf(obj)) } 
                 : layer
             )
           );
@@ -304,7 +311,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           setLayers(prevLayers => 
             prevLayers.map(layer => 
               layer.id === action.layerId 
-                ? { ...layer, objects: [...layer.objects, obj] } 
+                ? { ...layer, objects: [...(layer.objects || []), obj] } 
                 : layer
             )
           );
@@ -355,7 +362,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           setLayers(prevLayers => 
             prevLayers.map(layer => 
               layer.id === action.layerId 
-                ? { ...layer, objects: [...layer.objects, obj] } 
+                ? { ...layer, objects: [...(layer.objects || []), obj] } 
                 : layer
             )
           );
@@ -377,7 +384,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             setLayers(prevLayers => 
               prevLayers.map(layer => 
                 layer.id === action.layerId 
-                  ? { ...layer, objects: layer.objects.filter((_, idx) => idx !== layerObjects.indexOf(obj)) } 
+                  ? { ...layer, objects: (layer.objects || []).filter((_, idx) => idx !== layerObjects.indexOf(obj)) } 
                   : layer
               )
             );
