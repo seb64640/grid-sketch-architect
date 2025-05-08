@@ -255,23 +255,37 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   };
 
-  // Update the parent component's onUndo and onRedo functions
+  // Make undo/redo functions available to parent components
   useEffect(() => {
-    // Create direct references to the functions to be used externally
+    // Expose the undo/redo functions to the parent component
     if (onUndo) {
-      // Override with our implementation
-      const parentUndo = onUndo;
-      parentUndo.call = () => {
+      // Create a wrapper function to make sure 'this' is correctly bound
+      const handleUndo = () => {
         performUndo();
       };
+      
+      // Replace the original function with our implementation
+      const originalUndo = onUndo;
+      originalUndo.call = null; // Clear any previous binding
+      Object.defineProperty(originalUndo, 'call', {
+        value: handleUndo,
+        writable: false
+      });
     }
     
     if (onRedo) {
-      // Override with our implementation
-      const parentRedo = onRedo;
-      parentRedo.call = () => {
+      // Create a wrapper function to make sure 'this' is correctly bound
+      const handleRedo = () => {
         performRedo();
       };
+      
+      // Replace the original function with our implementation
+      const originalRedo = onRedo;
+      originalRedo.call = null; // Clear any previous binding
+      Object.defineProperty(originalRedo, 'call', {
+        value: handleRedo,
+        writable: false
+      });
     }
   }, []);
 
