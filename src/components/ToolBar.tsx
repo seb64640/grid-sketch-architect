@@ -51,6 +51,16 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   undoAction,
   redoAction,
 }) => {
+  // Fonction wrapper pour s'assurer que la fonction undoAction est correctement appelée
+  const handleUndo = () => {
+    if (undoAction) undoAction();
+  };
+
+  // Fonction wrapper pour s'assurer que la fonction redoAction est correctement appelée
+  const handleRedo = () => {
+    if (redoAction) redoAction();
+  };
+
   return (
     <div className="p-2 bg-white border-b flex items-center gap-1 flex-wrap">
       <Button
@@ -128,7 +138,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       <Button
         size="sm"
         variant="outline"
-        onClick={undoAction}
+        onClick={handleUndo}
         className="h-9 w-9 p-0"
         title="Annuler (Ctrl+Z)"
       >
@@ -138,7 +148,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       <Button
         size="sm"
         variant="outline"
-        onClick={redoAction}
+        onClick={handleRedo}
         className="h-9 w-9 p-0"
         title="Rétablir (Ctrl+Y)"
       >

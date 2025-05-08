@@ -255,36 +255,33 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   };
 
-  // Make undo/redo functions available to parent components
+  // Expose undo/redo functions explicitly to parent component
   useEffect(() => {
-    // Expose the undo/redo functions to the parent component
-    if (onUndo) {
-      // Create a wrapper function to make sure 'this' is correctly bound
-      const handleUndo = () => {
-        performUndo();
-      };
+    if (typeof onUndo === 'function') {
+      // Définir la fonction onUndo directement
+      (onUndo as any)._internalFunction = performUndo;
       
-      // Replace the original function with our implementation
-      const originalUndo = onUndo;
-      originalUndo.call = null; // Clear any previous binding
-      Object.defineProperty(originalUndo, 'call', {
-        value: handleUndo,
-        writable: false
+      // Réimplémenter la méthode call pour qu'elle appelle notre fonction
+      Object.defineProperty(onUndo, 'call', {
+        value: function() {
+          performUndo();
+        },
+        writable: true,
+        configurable: true
       });
     }
     
-    if (onRedo) {
-      // Create a wrapper function to make sure 'this' is correctly bound
-      const handleRedo = () => {
-        performRedo();
-      };
+    if (typeof onRedo === 'function') {
+      // Définir la fonction onRedo directement  
+      (onRedo as any)._internalFunction = performRedo;
       
-      // Replace the original function with our implementation
-      const originalRedo = onRedo;
-      originalRedo.call = null; // Clear any previous binding
-      Object.defineProperty(originalRedo, 'call', {
-        value: handleRedo,
-        writable: false
+      // Réimplémenter la méthode call pour qu'elle appelle notre fonction
+      Object.defineProperty(onRedo, 'call', {
+        value: function() {
+          performRedo();
+        },
+        writable: true,
+        configurable: true
       });
     }
   }, []);
