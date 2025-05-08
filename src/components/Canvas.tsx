@@ -158,6 +158,46 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.requestRenderAll();
   }, [activeTool]);
 
+  // Effet pour réagir aux changements de strokeWidth, strokeColor et fillColor
+  useEffect(() => {
+    // Cette fonction sera appelée à chaque changement des propriétés
+    if (!fabricCanvasRef.current) return;
+    
+    // Réinitialiser les outils pour appliquer les nouvelles propriétés
+    const canvas = fabricCanvasRef.current;
+    
+    // Mettre à jour tous les objets sélectionnés avec les nouvelles propriétés
+    const activeObjects = canvas.getActiveObjects();
+    if (activeObjects.length > 0) {
+      activeObjects.forEach(obj => {
+        if (obj.stroke !== undefined) {
+          obj.set({
+            stroke: strokeColor,
+            strokeWidth: strokeWidth
+          });
+        }
+        if (obj.fill !== undefined && obj !== gridRef.current) {
+          obj.set({ fill: fillColor });
+        }
+      });
+      canvas.requestRenderAll();
+    }
+    
+    // Réinitialiser les outils actuels pour qu'ils utilisent les nouvelles propriétés
+    canvas.off("mouse:down");
+    canvas.off("mouse:move");
+    canvas.off("mouse:up");
+    
+    // Remettre en place les interactions selon l'outil actif
+    if (activeTool === "line") {
+      setupLineTool(canvas);
+    } else if (activeTool === "circle") {
+      setupCircleTool(canvas);
+    } else if (activeTool === "rectangle") {
+      setupRectangleTool(canvas);
+    }
+  }, [strokeWidth, strokeColor, fillColor]);
+
   // Update objects interactivity based on current tool
   const updateObjectsInteractivity = (canvas: fabric.Canvas, tool: Tool) => {
     // Make all objects interactive or not based on the current tool
@@ -293,9 +333,9 @@ export const Canvas: React.FC<CanvasProps> = ({
         [snappedPoint.x, snappedPoint.y, snappedPoint.x, snappedPoint.y],
         {
           stroke: strokeColor,
-          strokeWidth: strokeWidth, // Utilise l'épaisseur définie
-          selectable: false, // Make it non-selectable while drawing
-          evented: false,    // Prevent events while drawing
+          strokeWidth: strokeWidth,
+          selectable: false,
+          evented: false,
         }
       );
       
@@ -386,13 +426,13 @@ export const Canvas: React.FC<CanvasProps> = ({
         top: snappedPoint.y,
         radius: 0,
         stroke: strokeColor,
-        strokeWidth: strokeWidth, // Utilise l'épaisseur définie
+        strokeWidth: strokeWidth,
         fill: fillColor,
         opacity: 0.5,
         originX: 'center',
         originY: 'center',
-        selectable: false, // Make it non-selectable while drawing
-        evented: false,    // Prevent events while drawing
+        selectable: false,
+        evented: false,
       });
       
       canvas.add(circle);
@@ -482,11 +522,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         width: 0,
         height: 0,
         stroke: strokeColor,
-        strokeWidth: strokeWidth, // Utilise l'épaisseur définie
+        strokeWidth: strokeWidth,
         fill: fillColor,
         opacity: 0.5,
-        selectable: false, // Make it non-selectable while drawing
-        evented: false,    // Prevent events while drawing
+        selectable: false,
+        evented: false,
       });
       
       canvas.add(rect);
