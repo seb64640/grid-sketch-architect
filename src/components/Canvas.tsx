@@ -1,7 +1,9 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
 import { toast } from "sonner";
+import type { Layer } from "./GridSketch";
 
 interface Point {
   x: number;
@@ -22,11 +24,15 @@ interface CanvasProps {
   isPrintMode: boolean;
   onUndo: () => void;
   onRedo: () => void;
+  layers: Layer[];
+  activeLayerId: string;
+  setLayers: React.Dispatch<React.SetStateAction<Layer[]>>;
 }
 
 type HistoryAction = {
   objects: fabric.Object[];
   type: 'add' | 'remove' | 'modify';
+  layerId: string;
 };
 
 export const Canvas: React.FC<CanvasProps> = ({
@@ -43,6 +49,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   isPrintMode,
   onUndo,
   onRedo,
+  layers,
+  activeLayerId,
+  setLayers,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
@@ -54,6 +63,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   const historyRef = useRef<HistoryAction[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const isHistoryActionRef = useRef<boolean>(false);
+
+  // Track which objects belong to which layer
+  const layerObjectsMap = useRef<Map<string, fabric.Object[]>>(new Map());
 
   // Initialize fabric canvas
   useEffect(() => {
@@ -67,6 +79,11 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
 
     fabricCanvasRef.current = canvas;
+    
+    // Initialize the layer objects map
+    layers.forEach(layer => {
+      layerObjectsMap.current.set(layer.id, []);
+    });
 
     // Add key event listeners
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -74,9 +91,28 @@ export const Canvas: React.FC<CanvasProps> = ({
         const activeObjects = canvas.getActiveObjects();
         if (activeObjects.length > 0) {
           // Save state before deleting
-          saveHistoryState(activeObjects, 'remove');
+          saveHistoryState(activeObjects, 'remove', activeLayerId);
           
-          activeObjects.forEach((obj) => canvas.remove(obj));
+          activeObjects.forEach((obj) => {
+            canvas.remove(obj);
+            
+            // Remove from all layers
+            layers.forEach(layer => {
+              const layerObjects = layerObjectsMap.current.get(layer.id) || [];
+              const updatedLayerObjects = layerObjects.filter(o => o !== obj);
+              layerObjectsMap.current.set(layer.id, updatedLayerObjects);
+              
+              // Also update the main layers state
+              setLayers(prevLayers => 
+                prevLayers.map(l => 
+                  l.id === layer.id 
+                    ? { ...l, objects: l.objects.filter((_, idx) => idx !== layerObjects.indexOf(obj)) } 
+                    : l
+                )
+              );
+            });
+          });
+          
           canvas.discardActiveObject();
           canvas.requestRenderAll();
           toast("Objets supprimés");
@@ -117,7 +153,21 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
       }
       
-      saveHistoryState([e.target], 'add');
+      // Add object to current layer
+      const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+      layerObjects.push(e.target);
+      layerObjectsMap.current.set(activeLayerId, layerObjects);
+      
+      // Update layers state
+      setLayers(prevLayers => 
+        prevLayers.map(layer => 
+          layer.id === activeLayerId 
+            ? { ...layer, objects: [...layer.objects, e.target] } 
+            : layer
+        )
+      );
+      
+      saveHistoryState([e.target], 'add', activeLayerId);
     });
 
     canvas.on('object:modified', function(e) {
@@ -128,22 +178,22 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
       }
       
-      saveHistoryState([e.target], 'modify');
+      saveHistoryState([e.target], 'modify', activeLayerId);
     });
 
-    // Ajout de la fonctionnalité d'aimantation à la grille lors du déplacement
+    // Snap to grid when moving
     canvas.on('object:moving', function(e) {
       if (!snapToGrid || !e.target) return;
       
       const obj = e.target;
       
-      // Snap à la grille
+      // Snap to grid
       const snapPoint = snapToGridPoint({
         x: obj.left || 0,
         y: obj.top || 0
       });
       
-      // Appliquer la position aimantée
+      // Apply the snapped position
       obj.set({
         left: snapPoint.x,
         top: snapPoint.y
@@ -154,10 +204,43 @@ export const Canvas: React.FC<CanvasProps> = ({
       document.removeEventListener("keydown", handleKeyDown);
       canvas.dispose();
     };
-  }, [width, height]);
+  }, [width, height, layers.length]);
+
+  // Update canvas when active layer changes
+  useEffect(() => {
+    if (!fabricCanvasRef.current) return;
+    
+    const canvas = fabricCanvasRef.current;
+    
+    // Update visibility of objects based on layer visibility
+    layers.forEach(layer => {
+      const layerObjects = layerObjectsMap.current.get(layer.id) || [];
+      
+      layerObjects.forEach(obj => {
+        // Skip if object no longer exists
+        if (!obj || !obj.canvas) return;
+        
+        // Update visibility based on layer visibility
+        obj.visible = layer.visible;
+        
+        // Update interactivity based on layer lock status and active layer
+        if (layer.locked || layer.id !== activeLayerId) {
+          obj.selectable = false;
+          obj.evented = false;
+        } else {
+          // Only make selectable if not in a drawing tool mode
+          obj.selectable = activeTool === "select";
+          obj.evented = activeTool === "select";
+        }
+      });
+    });
+    
+    canvas.requestRenderAll();
+    
+  }, [layers, activeLayerId, activeTool]);
 
   // Save the current state to history
-  const saveHistoryState = (objects: fabric.Object[], actionType: 'add' | 'remove' | 'modify') => {
+  const saveHistoryState = (objects: fabric.Object[], actionType: 'add' | 'remove' | 'modify', layerId: string) => {
     // If we're in the middle of the history, truncate the future states
     if (historyIndexRef.current < historyRef.current.length - 1) {
       historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
@@ -166,7 +249,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     // Add the new state
     historyRef.current.push({
       objects: [...objects],
-      type: actionType
+      type: actionType,
+      layerId
     });
     
     // Update index
@@ -190,12 +274,40 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Undo an addition by removing the objects
         action.objects.forEach(obj => {
           canvas.remove(obj);
+          
+          // Remove from layer
+          const layerObjects = layerObjectsMap.current.get(action.layerId) || [];
+          const updatedLayerObjects = layerObjects.filter(o => o !== obj);
+          layerObjectsMap.current.set(action.layerId, updatedLayerObjects);
+          
+          // Update layers state
+          setLayers(prevLayers => 
+            prevLayers.map(layer => 
+              layer.id === action.layerId 
+                ? { ...layer, objects: layer.objects.filter((_, idx) => idx !== layerObjects.indexOf(obj)) } 
+                : layer
+            )
+          );
         });
         toast("Action annulée");
       } else if (action.type === 'remove') {
         // Undo a removal by adding the objects back
         action.objects.forEach(obj => {
           canvas.add(obj);
+          
+          // Add back to layer
+          const layerObjects = layerObjectsMap.current.get(action.layerId) || [];
+          layerObjects.push(obj);
+          layerObjectsMap.current.set(action.layerId, layerObjects);
+          
+          // Update layers state
+          setLayers(prevLayers => 
+            prevLayers.map(layer => 
+              layer.id === action.layerId 
+                ? { ...layer, objects: [...layer.objects, obj] } 
+                : layer
+            )
+          );
         });
         toast("Suppression annulée");
       } else if (action.type === 'modify') {
@@ -233,6 +345,20 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Redo an addition by adding the objects back
         action.objects.forEach(obj => {
           canvas.add(obj);
+          
+          // Add to layer
+          const layerObjects = layerObjectsMap.current.get(action.layerId) || [];
+          layerObjects.push(obj);
+          layerObjectsMap.current.set(action.layerId, layerObjects);
+          
+          // Update layers state
+          setLayers(prevLayers => 
+            prevLayers.map(layer => 
+              layer.id === action.layerId 
+                ? { ...layer, objects: [...layer.objects, obj] } 
+                : layer
+            )
+          );
         });
         toast("Action rétablie");
       } else if (action.type === 'remove') {
@@ -241,6 +367,20 @@ export const Canvas: React.FC<CanvasProps> = ({
           const canvasObject = canvas.getObjects().find(o => o === obj);
           if (canvasObject) {
             canvas.remove(canvasObject);
+            
+            // Remove from layer
+            const layerObjects = layerObjectsMap.current.get(action.layerId) || [];
+            const updatedLayerObjects = layerObjects.filter(o => o !== obj);
+            layerObjectsMap.current.set(action.layerId, updatedLayerObjects);
+            
+            // Update layers state
+            setLayers(prevLayers => 
+              prevLayers.map(layer => 
+                layer.id === action.layerId 
+                  ? { ...layer, objects: layer.objects.filter((_, idx) => idx !== layerObjects.indexOf(obj)) } 
+                  : layer
+              )
+            );
           }
         });
         toast("Suppression rétablie");
@@ -327,7 +467,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
 
     canvas.requestRenderAll();
-  }, [activeTool]);
+  }, [activeTool, activeLayerId]);
 
   // Effet pour réagir aux changements de strokeWidth, strokeColor et fillColor
   useEffect(() => {
@@ -371,7 +511,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Update objects interactivity based on current tool
   const updateObjectsInteractivity = (canvas: fabric.Canvas, tool: Tool) => {
-    // Make all objects interactive or not based on the current tool
+    // Make all objects interactive or not based on the current tool and layer status
     const isDrawingTool = tool !== "select" && tool !== "erase";
     
     canvas.getObjects().forEach((obj) => {
@@ -384,8 +524,38 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
       }
       
-      obj.selectable = !isDrawingTool;
-      obj.evented = !isDrawingTool;
+      // Find which layer this object belongs to
+      let objectLayerId: string | null = null;
+      
+      for (const [layerId, objects] of layerObjectsMap.current.entries()) {
+        if (objects.includes(obj)) {
+          objectLayerId = layerId;
+          break;
+        }
+      }
+      
+      // If object is found in a layer
+      if (objectLayerId) {
+        const layer = layers.find(l => l.id === objectLayerId);
+        
+        // Apply layer visibility
+        if (layer) {
+          obj.visible = layer.visible;
+          
+          // Apply layer lock and interactivity
+          if (layer.locked || objectLayerId !== activeLayerId) {
+            obj.selectable = false;
+            obj.evented = false;
+          } else {
+            obj.selectable = !isDrawingTool;
+            obj.evented = !isDrawingTool;
+          }
+        }
+      } else {
+        // Default behavior for objects not assigned to layers
+        obj.selectable = !isDrawingTool;
+        obj.evented = !isDrawingTool;
+      }
     });
   };
 
@@ -474,6 +644,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     let line: fabric.Line | null = null;
     
     canvas.on("mouse:down", (o) => {
+      // Check if current layer is locked
+      const currentLayer = layers.find(l => l.id === activeLayerId);
+      if (currentLayer?.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
         x: pointer.x,
@@ -552,6 +729,20 @@ export const Canvas: React.FC<CanvasProps> = ({
           selectable: true,
           evented: true
         });
+        
+        // Add to layer
+        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+        layerObjects.push(line);
+        layerObjectsMap.current.set(activeLayerId, layerObjects);
+        
+        // Update layers state
+        setLayers(prevLayers => 
+          prevLayers.map(layer => 
+            layer.id === activeLayerId 
+              ? { ...layer, objects: [...layer.objects, line] } 
+              : layer
+          )
+        );
       }
       
       startPointRef.current = null;
@@ -566,6 +757,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     let circle: fabric.Circle | null = null;
     
     canvas.on("mouse:down", (o) => {
+      // Check if current layer is locked
+      const currentLayer = layers.find(l => l.id === activeLayerId);
+      if (currentLayer?.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
         x: pointer.x,
@@ -647,6 +845,20 @@ export const Canvas: React.FC<CanvasProps> = ({
           selectable: true,
           evented: true
         });
+        
+        // Add to layer
+        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+        layerObjects.push(circle);
+        layerObjectsMap.current.set(activeLayerId, layerObjects);
+        
+        // Update layers state
+        setLayers(prevLayers => 
+          prevLayers.map(layer => 
+            layer.id === activeLayerId 
+              ? { ...layer, objects: [...layer.objects, circle] } 
+              : layer
+          )
+        );
       }
       
       startPointRef.current = null;
@@ -661,6 +873,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     let rect: fabric.Rect | null = null;
     
     canvas.on("mouse:down", (o) => {
+      // Check if current layer is locked
+      const currentLayer = layers.find(l => l.id === activeLayerId);
+      if (currentLayer?.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
         x: pointer.x,
@@ -741,6 +960,20 @@ export const Canvas: React.FC<CanvasProps> = ({
           selectable: true,
           evented: true
         });
+        
+        // Add to layer
+        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+        layerObjects.push(rect);
+        layerObjectsMap.current.set(activeLayerId, layerObjects);
+        
+        // Update layers state
+        setLayers(prevLayers => 
+          prevLayers.map(layer => 
+            layer.id === activeLayerId 
+              ? { ...layer, objects: [...layer.objects, rect] } 
+              : layer
+          )
+        );
       }
       
       startPointRef.current = null;
@@ -753,6 +986,13 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Text tool setup
   const setupTextTool = (canvas: fabric.Canvas) => {
     canvas.on("mouse:down", (o) => {
+      // Check if current layer is locked
+      const currentLayer = layers.find(l => l.id === activeLayerId);
+      if (currentLayer?.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
         x: pointer.x,
@@ -773,8 +1013,22 @@ export const Canvas: React.FC<CanvasProps> = ({
       text.enterEditing();
       text.selectAll();
       
+      // Add to layer
+      const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+      layerObjects.push(text);
+      layerObjectsMap.current.set(activeLayerId, layerObjects);
+      
+      // Update layers state
+      setLayers(prevLayers => 
+        prevLayers.map(layer => 
+          layer.id === activeLayerId 
+            ? { ...layer, objects: [...layer.objects, text] } 
+            : layer
+        )
+      );
+      
       // Save to history after adding
-      saveHistoryState([text], 'add');
+      saveHistoryState([text], 'add', activeLayerId);
       
       canvas.requestRenderAll();
     });
@@ -805,18 +1059,57 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         // Check if object contains the clicked point or if it's close to a line or shape
         if (isPointInOrNearObject(obj, pointer)) {
+          // Check if object belongs to a locked layer
+          let isLocked = false;
+          let objectLayerId: string | null = null;
+          
+          for (const [layerId, objects] of layerObjectsMap.current.entries()) {
+            if (objects.includes(obj)) {
+              objectLayerId = layerId;
+              const layer = layers.find(l => l.id === layerId);
+              isLocked = layer?.locked || false;
+              break;
+            }
+          }
+          
+          if (isLocked) {
+            toast.error("Cet objet est sur un calque verrouillé");
+            continue;
+          }
+          
           objectToRemove = obj;
           break;
         }
       }
       
       if (objectToRemove) {
-        // Save state before removing
-        saveHistoryState([objectToRemove], 'remove');
-        
-        canvas.remove(objectToRemove);
-        canvas.requestRenderAll();
-        toast("Objet supprimé");
+        // Find which layer the object belongs to
+        for (const [layerId, objects] of layerObjectsMap.current.entries()) {
+          const index = objects.indexOf(objectToRemove);
+          if (index >= 0) {
+            // Save state before removing
+            saveHistoryState([objectToRemove], 'remove', layerId);
+            
+            // Remove from canvas
+            canvas.remove(objectToRemove);
+            
+            // Remove from layer objects map
+            objects.splice(index, 1);
+            
+            // Update layers state
+            setLayers(prevLayers => 
+              prevLayers.map(layer => 
+                layer.id === layerId 
+                  ? { ...layer, objects: layer.objects.filter((_, idx) => idx !== index) } 
+                  : layer
+              )
+            );
+            
+            canvas.requestRenderAll();
+            toast("Objet supprimé");
+            break;
+          }
+        }
       }
     });
   };
@@ -890,6 +1183,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     let arrowLine: fabric.Line | null = null;
     
     canvas.on("mouse:down", (o) => {
+      // Check if current layer is locked
+      const currentLayer = layers.find(l => l.id === activeLayerId);
+      if (currentLayer?.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
         x: pointer.x,
@@ -998,8 +1298,22 @@ export const Canvas: React.FC<CanvasProps> = ({
         canvas.remove(arrowLine, arrowHead);
         canvas.add(arrowGroup);
         
+        // Add to layer
+        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+        layerObjects.push(arrowGroup);
+        layerObjectsMap.current.set(activeLayerId, layerObjects);
+        
+        // Update layers state
+        setLayers(prevLayers => 
+          prevLayers.map(layer => 
+            layer.id === activeLayerId 
+              ? { ...layer, objects: [...layer.objects, arrowGroup] } 
+              : layer
+          )
+        );
+        
         // Save this to history
-        saveHistoryState([arrowGroup], 'add');
+        saveHistoryState([arrowGroup], 'add', activeLayerId);
         
         toast("Flèche ajoutée");
       }

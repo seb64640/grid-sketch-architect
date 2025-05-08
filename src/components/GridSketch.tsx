@@ -3,6 +3,16 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
 import { toast } from "sonner";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { Layers } from "lucide-react";
+
+export interface Layer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  objects: any[]; // Fabric.js objects
+}
 
 export const GridSketch = () => {
   // Canvas dimensions
@@ -26,6 +36,18 @@ export const GridSketch = () => {
   // Print mode
   const [isPrintMode, setIsPrintMode] = useState(false);
 
+  // Layers management
+  const [layers, setLayers] = useState<Layer[]>([
+    {
+      id: "layer-1",
+      name: "Calque 1",
+      visible: true,
+      locked: false,
+      objects: []
+    }
+  ]);
+  const [activeLayerId, setActiveLayerId] = useState<string>("layer-1");
+
   // History control
   const undoAction = useCallback(() => {
     // This will be overridden by the Canvas component
@@ -36,6 +58,87 @@ export const GridSketch = () => {
     // This will be overridden by the Canvas component
     toast("Rétablir");
   }, []);
+
+  // Layer management functions
+  const addLayer = () => {
+    const newLayerId = `layer-${layers.length + 1}`;
+    const newLayer: Layer = {
+      id: newLayerId,
+      name: `Calque ${layers.length + 1}`,
+      visible: true,
+      locked: false,
+      objects: []
+    };
+    
+    setLayers([...layers, newLayer]);
+    setActiveLayerId(newLayerId);
+    toast(`Nouveau calque: ${newLayer.name}`);
+  };
+
+  const removeLayer = (layerId: string) => {
+    // Don't allow removing the last layer
+    if (layers.length <= 1) {
+      toast.error("Impossible de supprimer le dernier calque");
+      return;
+    }
+    
+    const updatedLayers = layers.filter(layer => layer.id !== layerId);
+    setLayers(updatedLayers);
+    
+    // If active layer was removed, select another one
+    if (activeLayerId === layerId) {
+      setActiveLayerId(updatedLayers[0].id);
+    }
+    
+    toast("Calque supprimé");
+  };
+
+  const toggleLayerVisibility = (layerId: string) => {
+    const updatedLayers = layers.map(layer => {
+      if (layer.id === layerId) {
+        return {
+          ...layer,
+          visible: !layer.visible
+        };
+      }
+      return layer;
+    });
+    
+    setLayers(updatedLayers);
+    const targetLayer = layers.find(layer => layer.id === layerId);
+    toast(`Calque ${targetLayer?.name} ${targetLayer?.visible ? "masqué" : "visible"}`);
+  };
+
+  const toggleLayerLock = (layerId: string) => {
+    const updatedLayers = layers.map(layer => {
+      if (layer.id === layerId) {
+        return {
+          ...layer,
+          locked: !layer.locked
+        };
+      }
+      return layer;
+    });
+    
+    setLayers(updatedLayers);
+    const targetLayer = layers.find(layer => layer.id === layerId);
+    toast(`Calque ${targetLayer?.name} ${targetLayer?.locked ? "déverrouillé" : "verrouillé"}`);
+  };
+
+  const renameLayer = (layerId: string, newName: string) => {
+    const updatedLayers = layers.map(layer => {
+      if (layer.id === layerId) {
+        return {
+          ...layer,
+          name: newName
+        };
+      }
+      return layer;
+    });
+    
+    setLayers(updatedLayers);
+    toast(`Calque renommé en: ${newName}`);
+  };
 
   // Adjust canvas size based on window size
   useEffect(() => {
@@ -142,6 +245,52 @@ export const GridSketch = () => {
       />
       
       <div className="flex-1 p-4 overflow-auto bg-gray-100 canvas-container-wrapper">
+        {/* Layer controls */}
+        <div className="mb-2 flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+                <Layers className="mr-2 h-4 w-4" />
+                <span>{layers.find(layer => layer.id === activeLayerId)?.name || "Calque"}</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {layers.map((layer) => (
+                  <DropdownMenuItem
+                    key={layer.id}
+                    className={`flex items-center justify-between ${layer.id === activeLayerId ? 'bg-accent' : ''}`}
+                    onClick={() => setActiveLayerId(layer.id)}
+                  >
+                    <span>{layer.visible ? '👁️ ' : '🔒 '}{layer.name}</span>
+                    <div className="ml-2 space-x-2">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleLayerVisibility(layer.id);
+                        }}
+                        className="text-xs px-1 py-0.5"
+                      >
+                        {layer.visible ? 'Masquer' : 'Afficher'}
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeLayer(layer.id);
+                        }}
+                        className="text-xs text-red-500 px-1 py-0.5"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuItem onClick={addLayer} className="text-green-600">
+                  + Nouveau calque
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
         <Canvas
           width={canvasWidth}
           height={canvasHeight}
@@ -156,6 +305,9 @@ export const GridSketch = () => {
           isPrintMode={isPrintMode}
           onUndo={undoAction}
           onRedo={redoAction}
+          layers={layers}
+          activeLayerId={activeLayerId}
+          setLayers={setLayers}
         />
       </div>
     </div>
