@@ -119,6 +119,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.off("mouse:move");
     canvas.off("mouse:up");
 
+    // Make all objects non-interactive when using drawing tools
+    updateObjectsInteractivity(canvas, activeTool);
+
     // Set up tool-specific interactions
     if (activeTool === "line") {
       setupLineTool(canvas);
@@ -134,6 +137,22 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     canvas.requestRenderAll();
   }, [activeTool]);
+
+  // Update objects interactivity based on current tool
+  const updateObjectsInteractivity = (canvas: fabric.Canvas, tool: Tool) => {
+    // Make all objects interactive or not based on the current tool
+    const isDrawingTool = tool !== "select" && tool !== "erase";
+    
+    canvas.getObjects().forEach((obj) => {
+      // Skip grid points
+      if (gridRef.current && gridRef.current.contains(obj)) {
+        return;
+      }
+      
+      obj.selectable = !isDrawingTool;
+      obj.evented = !isDrawingTool;
+    });
+  };
 
   // Update grid when grid properties change
   useEffect(() => {
@@ -249,12 +268,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         {
           stroke: strokeColor,
           strokeWidth: strokeWidth,
-          selectable: true,
+          selectable: false, // Make it non-selectable while drawing
+          evented: false,    // Prevent events while drawing
         }
       );
       
       canvas.add(line);
-      canvas.setActiveObject(line);
     });
     
     canvas.on("mouse:move", (o) => {
@@ -290,6 +309,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       ) {
         canvas.remove(line);
         toast("Line canceled - zero length");
+      } else {
+        // Now make the line selectable for future interactions
+        line.set({
+          selectable: true,
+          evented: true
+        });
       }
       
       startPointRef.current = null;
@@ -340,11 +365,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         opacity: 0.5,
         originX: 'center',
         originY: 'center',
-        selectable: true,
+        selectable: false, // Make it non-selectable while drawing
+        evented: false,    // Prevent events while drawing
       });
       
       canvas.add(circle);
-      canvas.setActiveObject(circle);
     });
     
     canvas.on("mouse:move", (o) => {
@@ -379,6 +404,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (circle.radius === 0) {
         canvas.remove(circle);
         toast("Circle canceled - zero radius");
+      } else {
+        // Now make the circle selectable for future interactions
+        circle.set({
+          selectable: true,
+          evented: true
+        });
       }
       
       startPointRef.current = null;
@@ -428,11 +459,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         strokeWidth: strokeWidth,
         fill: fillColor,
         opacity: 0.5,
-        selectable: true,
+        selectable: false, // Make it non-selectable while drawing
+        evented: false,    // Prevent events while drawing
       });
       
       canvas.add(rect);
-      canvas.setActiveObject(rect);
     });
     
     canvas.on("mouse:move", (o) => {
@@ -467,6 +498,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (rect.width === 0 && rect.height === 0) {
         canvas.remove(rect);
         toast("Rectangle canceled - zero size");
+      } else {
+        // Now make the rectangle selectable for future interactions
+        rect.set({
+          selectable: true,
+          evented: true
+        });
       }
       
       startPointRef.current = null;
