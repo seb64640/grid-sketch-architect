@@ -257,32 +257,19 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Expose undo/redo functions explicitly to parent component
   useEffect(() => {
-    if (typeof onUndo === 'function') {
-      // Définir la fonction onUndo directement
-      (onUndo as any)._internalFunction = performUndo;
-      
-      // Réimplémenter la méthode call pour qu'elle appelle notre fonction
-      Object.defineProperty(onUndo, 'call', {
-        value: function() {
-          performUndo();
-        },
-        writable: true,
-        configurable: true
-      });
+    // Direct function replacement - simpler approach
+    if (onUndo && typeof onUndo === 'function') {
+      // Define the original function to our implementation
+      const originalUndo = onUndo;
+      // Replace it with our implementation
+      onUndo = () => performUndo();
     }
     
-    if (typeof onRedo === 'function') {
-      // Définir la fonction onRedo directement  
-      (onRedo as any)._internalFunction = performRedo;
-      
-      // Réimplémenter la méthode call pour qu'elle appelle notre fonction
-      Object.defineProperty(onRedo, 'call', {
-        value: function() {
-          performRedo();
-        },
-        writable: true,
-        configurable: true
-      });
+    if (onRedo && typeof onRedo === 'function') {
+      // Define the original function to our implementation
+      const originalRedo = onRedo;
+      // Replace it with our implementation
+      onRedo = () => performRedo();
     }
   }, []);
 
