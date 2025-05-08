@@ -58,6 +58,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   const tempPointRef = useRef<fabric.Circle | null>(null);
   const startPointRef = useRef<Point | null>(null);
   
+  // Gardez une trace des dimensions précédentes pour déterminer s'il faut ajuster le zoom
+  const prevDimensionsRef = useRef<{ width: number, height: number }>({ width, height });
+  
   // History state for undo/redo
   const historyRef = useRef<HistoryAction[]>([]);
   const historyIndexRef = useRef<number>(-1);
@@ -75,6 +78,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       height,
       selection: activeTool === "select",
       backgroundColor: "#ffffff",
+      preserveObjectStacking: true, // Maintenir l'ordre d'empilement des objets
     });
 
     fabricCanvasRef.current = canvas;
@@ -208,6 +212,60 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.dispose();
     };
   }, [width, height, layers.length]);
+
+  // Handle canvas resize - Préserver les objets lorsque les dimensions changent
+  useEffect(() => {
+    if (!fabricCanvasRef.current) return;
+    const canvas = fabricCanvasRef.current;
+    
+    // Si le canvas existe déjà, ajustez ses dimensions
+    if (width !== canvas.width || height !== canvas.height) {
+      // Sauvegardez l'ancien rapport de zoom
+      const oldWidth = prevDimensionsRef.current.width;
+      const oldHeight = prevDimensionsRef.current.height;
+      
+      // Mettez à jour les dimensions du canvas
+      canvas.setDimensions({ width, height });
+      
+      // Si ce n'est pas la première initialisation (vérifiez que oldWidth et oldHeight ont des valeurs valides)
+      if (oldWidth > 0 && oldHeight > 0) {
+        // Calcul des ratios de redimensionnement
+        const scaleX = width / oldWidth;
+        const scaleY = height / oldHeight;
+        
+        // Ajustez la vue pour éviter la disparition des objets
+        // Si les nouvelles dimensions sont plus petites, vous pourriez envisager de dézoomer
+        if (scaleX < 1 || scaleY < 1) {
+          // Décidez si un ajustement de zoom est nécessaire selon l'ampleur du changement
+          const minScale = Math.min(scaleX, scaleY);
+          if (minScale < 0.8) { // Ajustez uniquement si le changement est significatif
+            canvas.setZoom(canvas.getZoom() * minScale);
+          }
+        }
+      }
+      
+      // Mémoriser les nouvelles dimensions pour la prochaine comparaison
+      prevDimensionsRef.current = { width, height };
+      
+      // Redessinez la grille après le redimensionnement
+      drawGrid();
+      
+      // Assurez-vous que tous les objets sont toujours dans les limites
+      canvas.getObjects().forEach(obj => {
+        // Assurez-vous que l'objet n'est pas déplacé hors des limites visibles
+        const objBounds = obj.getBoundingRect();
+        if (objBounds && (objBounds.left > width || objBounds.top > height)) {
+          // Si l'objet est complètement hors des limites, ajustez sa position
+          if (objBounds.left > width) obj.set({ left: width - objBounds.width });
+          if (objBounds.top > height) obj.set({ top: height - objBounds.height });
+          obj.setCoords(); // Mise à jour des coordonnées
+        }
+      });
+      
+      // Demandez un rendu après le redimensionnement
+      canvas.requestRenderAll();
+    }
+  }, [width, height]);
 
   // Update canvas when active layer changes
   useEffect(() => {
@@ -471,7 +529,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.requestRenderAll();
   }, [activeTool, activeLayerId]);
 
-  // Effet pour réagir aux changements de strokeWidth, strokeColor et fillColor
+  // Effect to react to changes in strokeWidth, strokeColor and fillColor
   useEffect(() => {
     // Cette fonction sera appelée à chaque changement des propriétés
     if (!fabricCanvasRef.current) return;
@@ -573,7 +631,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     fabricCanvasRef.current.requestRenderAll();
   }, [isPrintMode, gridVisible]);
 
-  // Draw the grid of points
+  // Draw the grid of points with correct dimensions
   const drawGrid = () => {
     if (!fabricCanvasRef.current) return;
     
@@ -586,8 +644,8 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     const points = [];
     const cellSize = gridSize;
-    const cols = Math.floor(width / cellSize) + 1;
-    const rows = Math.floor(height / cellSize) + 1;
+    const cols = Math.floor(canvas.width / cellSize) + 1;
+    const rows = Math.floor(canvas.height / cellSize) + 1;
 
     // Create grid points
     for (let row = 0; row < rows; row++) {
@@ -1326,10 +1384,10 @@ export const Canvas: React.FC<CanvasProps> = ({
   };
 
   return (
-    <div className="canvas-container">
+    <div className="canvas-container relative">
       <canvas 
         ref={canvasRef}
-        className={isPrintMode ? "print-view" : ""}
+        className={`${isPrintMode ? "print-view" : ""} border border-gray-200 shadow-sm block`}
       />
     </div>
   );

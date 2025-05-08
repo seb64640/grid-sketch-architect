@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
 import { toast } from "sonner";
@@ -14,7 +14,8 @@ export interface Layer {
 }
 
 export const GridSketch = () => {
-  // Canvas dimensions
+  // Canvas dimensions et référence du conteneur
+  const containerRef = useRef<HTMLDivElement>(null);
   const [canvasWidth, setCanvasWidth] = useState(800);
   const [canvasHeight, setCanvasHeight] = useState(600);
 
@@ -139,22 +140,34 @@ export const GridSketch = () => {
     toast(`Calque renommé en: ${newName}`);
   };
 
-  // Adjust canvas size based on window size
+  // Adjust canvas size based on window size and handle resize events
   useEffect(() => {
     const updateCanvasSize = () => {
-      const container = document.querySelector(".canvas-container-wrapper");
-      if (container) {
-        const rect = container.getBoundingClientRect();
-        setCanvasWidth(rect.width - 20); // 20px for padding
-        setCanvasHeight(Math.min(rect.height - 20, 600)); // Max height of 600px
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const newWidth = Math.max(rect.width - 20, 100); // Min width 100px, 20px padding
+        const newHeight = Math.max(Math.min(rect.height - 20, 600), 100); // Min height 100px, max 600px
+        
+        setCanvasWidth(newWidth);
+        setCanvasHeight(newHeight);
       }
     };
 
+    // Initial size setting
     updateCanvasSize();
-    window.addEventListener("resize", updateCanvasSize);
+    
+    // Add resize event listener with debounce
+    let resizeTimer: number;
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(updateCanvasSize, 100);
+    };
+    
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      window.removeEventListener("resize", updateCanvasSize);
+      window.removeEventListener("resize", handleResize);
+      clearTimeout(resizeTimer);
     };
   }, []);
   
@@ -243,7 +256,10 @@ export const GridSketch = () => {
         setStrokeColor={setStrokeColor}
       />
       
-      <div className="flex-1 p-4 overflow-auto bg-gray-100 canvas-container-wrapper">
+      <div 
+        className="flex-1 p-4 overflow-auto bg-gray-100 canvas-container-wrapper" 
+        ref={containerRef}
+      >
         {/* Layer controls */}
         <div className="mb-2 flex justify-between items-center">
           <div className="flex items-center space-x-2">
