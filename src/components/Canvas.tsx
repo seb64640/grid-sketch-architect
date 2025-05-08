@@ -867,97 +867,129 @@ export const Canvas: React.FC<CanvasProps> = ({
     return false;
   };
   
-  // New Arrow tool setup
+  // New Arrow tool setup for free placement
   const setupArrowTool = (canvas: fabric.Canvas) => {
+    let arrowLine: fabric.Line | null = null;
+    
     canvas.on("mouse:down", (o) => {
-      // First, check if we clicked on a line
-      if (!o.target || !(o.target instanceof fabric.Line)) {
-        toast("Veuillez cliquer sur une ligne pour ajouter une flèche");
-        return;
+      const pointer = canvas.getPointer(o.e);
+      const snappedPoint = snapToGridPoint({
+        x: pointer.x,
+        y: pointer.y,
+      });
+      
+      startPointRef.current = snappedPoint;
+      
+      // Show temporary point
+      if (tempPointRef.current) {
+        canvas.remove(tempPointRef.current);
       }
       
-      const line = o.target as fabric.Line;
-      const pointer = canvas.getPointer(o.e);
-      
-      // Get line coordinates
-      const x1 = line.x1 || 0;
-      const y1 = line.y1 || 0;
-      const x2 = line.x2 || 0;
-      const y2 = line.y2 || 0;
-      
-      // Calculate line direction vector
-      const lineVectorX = x2 - x1;
-      const lineVectorY = y2 - y1;
-      const lineLength = Math.sqrt(lineVectorX * lineVectorX + lineVectorY * lineVectorY);
-      
-      if (lineLength === 0) return; // Prevent division by zero
-      
-      // Normalize the line vector
-      const normalizedLineVectorX = lineVectorX / lineLength;
-      const normalizedLineVectorY = lineVectorY / lineLength;
-      
-      // Calculate perpendicular vector (rotate 90 degrees)
-      const perpVectorX = -normalizedLineVectorY;
-      const perpVectorY = normalizedLineVectorX;
-      
-      // Find the closest point on the line to the click point
-      const dx = pointer.x - x1;
-      const dy = pointer.y - y1;
-      const t = (dx * lineVectorX + dy * lineVectorY) / (lineLength * lineLength);
-      const clampedT = Math.max(0, Math.min(1, t)); // Clamp to [0, 1]
-      
-      // Calculate the closest point on the line
-      const closestX = x1 + clampedT * lineVectorX;
-      const closestY = y1 + clampedT * lineVectorY;
-      
-      // Calculate which side of the line the click is on
-      const cross = (pointer.x - x1) * (y2 - y1) - (pointer.y - y1) * (x2 - x1);
-      const direction = Math.sign(cross);
-      
-      // Calculate arrow start point (on the line)
-      const startX = closestX;
-      const startY = closestY;
-      
-      // Calculate arrow end point (perpendicular to the line)
-      const arrowLength = 40; // Length of the arrow
-      const endX = startX + direction * perpVectorX * arrowLength;
-      const endY = startY + direction * perpVectorY * arrowLength;
-      
-      // Create the arrow line
-      const arrowLine = new fabric.Line([startX, startY, endX, endY], {
-        stroke: strokeColor,
-        strokeWidth: strokeWidth,
-        selectable: true,
-      });
-      
-      // Calculate the position for the arrowhead
-      const arrowHeadSize = 10;
-      const headAngle = Math.atan2(endY - startY, endX - startX);
-      
-      // Create the arrowhead using a small triangle
-      const arrowHead = new fabric.Triangle({
-        left: endX,
-        top: endY,
-        width: arrowHeadSize,
-        height: arrowHeadSize,
+      tempPointRef.current = new fabric.Circle({
+        left: snappedPoint.x,
+        top: snappedPoint.y,
+        radius: 4,
         fill: strokeColor,
-        stroke: strokeColor,
-        strokeWidth: 1,
-        angle: (headAngle * 180 / Math.PI) + 90,
         originX: 'center',
         originY: 'center',
-        selectable: true,
+        selectable: false,
       });
       
-      // Group the arrow line and arrowhead together
-      const arrow = new fabric.Group([arrowLine, arrowHead], {
-        selectable: true,
-        evented: true,
+      canvas.add(tempPointRef.current);
+      
+      // Create the initial arrow line
+      arrowLine = new fabric.Line(
+        [snappedPoint.x, snappedPoint.y, snappedPoint.x, snappedPoint.y],
+        {
+          stroke: strokeColor,
+          strokeWidth: strokeWidth,
+          selectable: false,
+          evented: false,
+        }
+      );
+      
+      canvas.add(arrowLine);
+    });
+    
+    canvas.on("mouse:move", (o) => {
+      if (!arrowLine || !startPointRef.current) return;
+      
+      const pointer = canvas.getPointer(o.e);
+      const snappedPoint = snapToGridPoint({
+        x: pointer.x,
+        y: pointer.y,
       });
       
-      canvas.add(arrow);
+      arrowLine.set({
+        x2: snappedPoint.x,
+        y2: snappedPoint.y,
+      });
+      
       canvas.requestRenderAll();
-      toast("Flèche ajoutée");
+    });
+    
+    canvas.on("mouse:up", () => {
+      if (!arrowLine || !startPointRef.current) return;
+      
+      // Remove temporary point
+      if (tempPointRef.current) {
+        canvas.remove(tempPointRef.current);
+        tempPointRef.current = null;
+      }
+      
+      // Remove zero-length arrows
+      if (
+        arrowLine.x1 === arrowLine.x2 &&
+        arrowLine.y1 === arrowLine.y2
+      ) {
+        canvas.remove(arrowLine);
+        toast("Flèche annulée - longueur nulle");
+      } else {
+        // Calculate the angle for the arrowhead
+        const deltaX = (arrowLine.x2 || 0) - (arrowLine.x1 || 0);
+        const deltaY = (arrowLine.y2 || 0) - (arrowLine.y1 || 0);
+        const angle = Math.atan2(deltaY, deltaX);
+        
+        // Create arrowhead
+        const arrowHeadSize = Math.max(8, strokeWidth * 2); // Scale with stroke width
+        
+        const arrowHead = new fabric.Triangle({
+          left: arrowLine.x2,
+          top: arrowLine.y2,
+          originX: 'center',
+          originY: 'center',
+          pointType: 'arrow_head',
+          width: arrowHeadSize * 2,
+          height: arrowHeadSize,
+          fill: strokeColor,
+          stroke: strokeColor,
+          angle: (angle * 180 / Math.PI) + 90,
+          selectable: false,
+          evented: false,
+        });
+        
+        canvas.add(arrowHead);
+        
+        // Group the line and arrowhead
+        const arrowGroup = new fabric.Group([arrowLine, arrowHead], {
+          selectable: true,
+          evented: true,
+        });
+        
+        // Remove the individual objects and add the group
+        canvas.remove(arrowLine, arrowHead);
+        canvas.add(arrowGroup);
+        
+        // Save this to history
+        saveHistoryState([arrowGroup], 'add');
+        
+        toast("Flèche ajoutée");
+      }
+      
+      startPointRef.current = null;
+      arrowLine = null;
+      
+      canvas.requestRenderAll();
     });
   };
 
