@@ -79,6 +79,26 @@ export const Canvas: React.FC<CanvasProps> = ({
     // Create the grid
     drawGrid();
 
+    // Ajout de la fonctionnalité d'aimantation à la grille lors du déplacement
+    canvas.on('object:moving', function(e) {
+      if (!snapToGrid || !e.target) return;
+      
+      const obj = e.target;
+      const gridSize = 20; // Utiliser la taille de la grille
+      
+      // Snap à la grille
+      const snapPoint = snapToGridPoint({
+        x: obj.left || 0,
+        y: obj.top || 0
+      });
+      
+      // Appliquer la position aimantée
+      obj.set({
+        left: snapPoint.x,
+        top: snapPoint.y
+      });
+    });
+
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       canvas.dispose();
@@ -409,7 +429,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       // Remove zero-radius circles
       if (circle.radius === 0) {
         canvas.remove(circle);
-        toast("Circle canceled - zero radius");
+        toast("Cercle annulé - rayon nul");
       } else {
         // Now make the circle selectable for future interactions
         circle.set({
@@ -503,7 +523,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       // Remove zero-size rectangles
       if (rect.width === 0 && rect.height === 0) {
         canvas.remove(rect);
-        toast("Rectangle canceled - zero size");
+        toast("Rectangle annulé - taille nulle");
       } else {
         // Now make the rectangle selectable for future interactions
         rect.set({
