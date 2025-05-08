@@ -3,7 +3,7 @@ import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { Layers } from "lucide-react";
+import { Layers, Eye, EyeOff, Lock, Unlock } from "lucide-react";
 
 export interface Layer {
   id: string;
@@ -36,7 +36,6 @@ export const GridSketch = () => {
   const [isPrintMode, setIsPrintMode] = useState(false);
 
   // Layers management - Initialize with a default layer
-  // FIX: Make sure each layer has an initialized empty objects array
   const [layers, setLayers] = useState<Layer[]>([
     {
       id: "layer-1",
@@ -260,7 +259,17 @@ export const GridSketch = () => {
                     className={`flex items-center justify-between ${layer.id === activeLayerId ? 'bg-accent' : ''}`}
                     onClick={() => setActiveLayerId(layer.id)}
                   >
-                    <span>{layer.visible ? '👁️ ' : '🔒 '}{layer.name}</span>
+                    <div className="flex items-center">
+                      {layer.visible ? 
+                        <Eye className="h-4 w-4 mr-2" /> : 
+                        <EyeOff className="h-4 w-4 mr-2 text-gray-400" />
+                      }
+                      {layer.locked ? 
+                        <Lock className="h-4 w-4 mr-2" /> : 
+                        <Unlock className="h-4 w-4 mr-2 text-gray-400" />
+                      }
+                      <span>{layer.name}</span>
+                    </div>
                     <div className="ml-2 space-x-2">
                       <button 
                         onClick={(e) => {
