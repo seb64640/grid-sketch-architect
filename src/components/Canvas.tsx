@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -267,30 +268,45 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, [width, height]);
 
-  // Update canvas when active layer changes
+  // Problème: Les calques ne fonctionnent pas correctement - correction
+  // Update canvas when active layer changes or layers visibility changes
   useEffect(() => {
     if (!fabricCanvasRef.current) return;
     
     const canvas = fabricCanvasRef.current;
+    console.log("Layer update effect triggered, activeLayerId:", activeLayerId);
     
-    // CORRECTION: Make sure the objects get assigned to the right layer
-    // and are visible/hidden based on layer settings
+    // 1. Supprimer tous les objets du canvas (sauf la grille)
+    // Cette approche garantit que nous avons un contrôle total sur ce qui est affiché
+    const objectsToKeep = [];
+    canvas.getObjects().forEach(obj => {
+      // Garder la grille et les points temporaires
+      if ((gridRef.current && (gridRef.current === obj || gridRef.current.contains(obj))) || 
+          obj === tempPointRef.current) {
+        objectsToKeep.push(obj);
+      }
+    });
+    
+    canvas.clear();
+    
+    // Remettre la grille et les points temporaires s'ils existaient
+    objectsToKeep.forEach(obj => canvas.add(obj));
+    
+    // 2. Réajouter les objets de tous les calques visibles
     layers.forEach(layer => {
-      if (!layer) return;
+      if (!layer || !layer.visible) return;
       
       const layerObjects = layerObjectsMap.current.get(layer.id) || [];
+      console.log(`Calque ${layer.id} (${layer.name}): ${layerObjects.length} objets`);
       
       layerObjects.forEach(obj => {
-        // Skip if object no longer exists
-        if (!obj || !obj.canvas) return;
+        // Vérifier si l'objet existe déjà sur le canvas
+        if (!canvas.contains(obj)) {
+          canvas.add(obj);
+        }
         
-        // Apply layer visibility to objects
-        obj.visible = layer.visible;
-        
-        // Update interactivity based on layer lock status and active layer
+        // Appliquer les paramètres de sélection et d'interaction
         const isActive = layer.id === activeLayerId;
-        
-        // Only objects in the active layer should be selectable (when in select mode)
         obj.selectable = isActive && !layer.locked && activeTool === "select";
         obj.evented = isActive && !layer.locked;
       });
@@ -298,6 +314,16 @@ export const Canvas: React.FC<CanvasProps> = ({
     
     canvas.requestRenderAll();
     
+    // Garantir que les objets du calque actif sont au-dessus
+    const activeLayerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+    activeLayerObjects.forEach(obj => obj.bringToFront());
+    
+    // S'assurer que la grille est toujours au fond
+    if (gridRef.current) {
+      gridRef.current.sendToBack();
+    }
+    
+    canvas.requestRenderAll();
   }, [layers, activeLayerId, activeTool]);
 
   // Save the current state to history
