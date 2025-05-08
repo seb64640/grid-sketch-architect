@@ -1,4 +1,3 @@
-
 import React from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -117,7 +116,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       <Button
         size="sm"
         variant="outline"
-        onClick={undoAction}
+        onClick={() => undoAction()}
         className="h-9 w-9 p-0"
         title="Annuler (Ctrl+Z)"
       >
@@ -127,7 +126,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       <Button
         size="sm"
         variant="outline"
-        onClick={redoAction}
+        onClick={() => redoAction()}
         className="h-9 w-9 p-0"
         title="Rétablir (Ctrl+Y)"
       >

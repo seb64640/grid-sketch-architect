@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -254,6 +253,7 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Export the undo/redo functions for toolbar use
   useEffect(() => {
+    // These need to be direct references to the functions
     onUndo = performUndo;
     onRedo = performRedo;
   }, [onUndo, onRedo]);
@@ -759,39 +759,30 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
   };
 
-  // Erase tool setup
+  // Erase tool setup - Fixed to properly detect and remove objects
   const setupEraseTool = (canvas: fabric.Canvas) => {
     canvas.on("mouse:down", (o) => {
-      const pointer = canvas.getPointer(o.e);
+      if (!o.target) return; // No object was clicked
       
-      // Find object under pointer - make sure we're getting ALL objects
-      const objects = canvas.getObjects();
-      let objectToRemove = null;
+      const objectToRemove = o.target;
       
-      // Iterate from top to bottom (reverse order) to get the topmost object
-      for (let i = objects.length - 1; i >= 0; i--) {
-        const obj = objects[i];
-        
-        // Skip grid
-        if (obj === gridRef.current || (gridRef.current && gridRef.current.contains(obj))) {
-          continue;
-        }
-        
-        // Test if pointer is within the object
-        if (obj.containsPoint(pointer)) {
-          objectToRemove = obj;
-          break;
-        }
+      // Skip grid
+      if (gridRef.current && (gridRef.current === objectToRemove || 
+          (gridRef.current.contains && gridRef.current.contains(objectToRemove)))) {
+        return;
       }
       
-      if (objectToRemove) {
-        // Save state before removing
-        saveHistoryState([objectToRemove], 'remove');
-        
-        canvas.remove(objectToRemove);
-        canvas.requestRenderAll();
-        toast("Objet supprimé");
+      // Skip temporary point
+      if (tempPointRef.current === objectToRemove) {
+        return;
       }
+      
+      // Save state before removing
+      saveHistoryState([objectToRemove], 'remove');
+      
+      canvas.remove(objectToRemove);
+      canvas.requestRenderAll();
+      toast("Objet supprimé");
     });
   };
 
