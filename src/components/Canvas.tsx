@@ -165,7 +165,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       layerObjects.push(e.target);
       layerObjectsMap.current.set(activeLayerId, layerObjects);
       
-      // Update layers state
+      // Update layers state with the new object
       setLayers(prevLayers => 
         prevLayers.map(layer => 
           layer.id === activeLayerId 
@@ -273,9 +273,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     
     const canvas = fabricCanvasRef.current;
     
-    // Update visibility of objects based on layer visibility
+    // CORRECTION: Make sure the objects get assigned to the right layer
+    // and are visible/hidden based on layer settings
     layers.forEach(layer => {
-      if (!layer || !layer.objects) return;
+      if (!layer) return;
       
       const layerObjects = layerObjectsMap.current.get(layer.id) || [];
       
@@ -704,7 +705,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on("mouse:down", (o) => {
       // Check if current layer is locked
       const currentLayer = layers.find(l => l.id === activeLayerId);
-      if (currentLayer?.locked) {
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
+      
+      if (currentLayer.locked) {
         toast.error("Le calque est verrouillé");
         return;
       }
@@ -788,7 +794,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           evented: true
         });
         
-        // Add to layer
+        // CORRECTION: Add to the active layer only
         const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
         layerObjects.push(line);
         layerObjectsMap.current.set(activeLayerId, layerObjects);
@@ -801,6 +807,9 @@ export const Canvas: React.FC<CanvasProps> = ({
               : layer
           )
         );
+        
+        // Log for debugging
+        console.log(`Added line to layer: ${activeLayerId}`);
       }
       
       startPointRef.current = null;
@@ -817,7 +826,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on("mouse:down", (o) => {
       // Check if current layer is locked
       const currentLayer = layers.find(l => l.id === activeLayerId);
-      if (currentLayer?.locked) {
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
+      
+      if (currentLayer.locked) {
         toast.error("Le calque est verrouillé");
         return;
       }
@@ -904,7 +918,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           evented: true
         });
         
-        // Add to layer
+        // CORRECTION: Add to the active layer only
         const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
         layerObjects.push(circle);
         layerObjectsMap.current.set(activeLayerId, layerObjects);
@@ -913,10 +927,13 @@ export const Canvas: React.FC<CanvasProps> = ({
         setLayers(prevLayers => 
           prevLayers.map(layer => 
             layer.id === activeLayerId 
-              ? { ...layer, objects: [...layer.objects, circle] } 
+              ? { ...layer, objects: [...(layer.objects || []), circle] } 
               : layer
           )
         );
+        
+        // Log for debugging
+        console.log(`Added circle to layer: ${activeLayerId}`);
       }
       
       startPointRef.current = null;
@@ -933,7 +950,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on("mouse:down", (o) => {
       // Check if current layer is locked
       const currentLayer = layers.find(l => l.id === activeLayerId);
-      if (currentLayer?.locked) {
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
+      
+      if (currentLayer.locked) {
         toast.error("Le calque est verrouillé");
         return;
       }
@@ -1019,7 +1041,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           evented: true
         });
         
-        // Add to layer
+        // CORRECTION: Add to the active layer only
         const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
         layerObjects.push(rect);
         layerObjectsMap.current.set(activeLayerId, layerObjects);
@@ -1028,10 +1050,13 @@ export const Canvas: React.FC<CanvasProps> = ({
         setLayers(prevLayers => 
           prevLayers.map(layer => 
             layer.id === activeLayerId 
-              ? { ...layer, objects: [...layer.objects, rect] } 
+              ? { ...layer, objects: [...(layer.objects || []), rect] } 
               : layer
           )
         );
+        
+        // Log for debugging
+        console.log(`Added rectangle to layer: ${activeLayerId}`);
       }
       
       startPointRef.current = null;
@@ -1046,7 +1071,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on("mouse:down", (o) => {
       // Check if current layer is locked
       const currentLayer = layers.find(l => l.id === activeLayerId);
-      if (currentLayer?.locked) {
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
+      
+      if (currentLayer.locked) {
         toast.error("Le calque est verrouillé");
         return;
       }
@@ -1071,22 +1101,25 @@ export const Canvas: React.FC<CanvasProps> = ({
       text.enterEditing();
       text.selectAll();
       
-      // Add to layer
+      // CORRECTION: Add to the active layer only
       const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
       layerObjects.push(text);
       layerObjectsMap.current.set(activeLayerId, layerObjects);
       
-      // Update layers state
+      // Update layers state with the specific active layer
       setLayers(prevLayers => 
         prevLayers.map(layer => 
           layer.id === activeLayerId 
-            ? { ...layer, objects: [...layer.objects, text] } 
+            ? { ...layer, objects: [...(layer.objects || []), text] } 
             : layer
         )
       );
       
       // Save to history after adding
       saveHistoryState([text], 'add', activeLayerId);
+      
+      // Log for debugging
+      console.log(`Added text to layer: ${activeLayerId}`);
       
       canvas.requestRenderAll();
     });
@@ -1243,7 +1276,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on("mouse:down", (o) => {
       // Check if current layer is locked
       const currentLayer = layers.find(l => l.id === activeLayerId);
-      if (currentLayer?.locked) {
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
+      
+      if (currentLayer.locked) {
         toast.error("Le calque est verrouillé");
         return;
       }
