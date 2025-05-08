@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
@@ -37,6 +36,7 @@ export const GridSketch = () => {
   const [isPrintMode, setIsPrintMode] = useState(false);
 
   // Layers management - Initialize with a default layer
+  // FIX: Make sure each layer has an initialized empty objects array
   const [layers, setLayers] = useState<Layer[]>([
     {
       id: "layer-1",
@@ -67,7 +67,7 @@ export const GridSketch = () => {
       name: `Calque ${layers.length + 1}`,
       visible: true,
       locked: false,
-      objects: []
+      objects: [] // Initialize with empty objects array
     };
     
     setLayers([...layers, newLayer]);
@@ -248,58 +248,55 @@ export const GridSketch = () => {
         {/* Layer controls */}
         <div className="mb-2 flex justify-between items-center">
           <div className="flex items-center space-x-2">
-            {/* Ensure we're using a function component for DropdownMenu */}
-            <div>
-              <DropdownMenu>
-                <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
-                  <Layers className="mr-2 h-4 w-4" />
-                  <span>{layers.find(layer => layer.id === activeLayerId)?.name || "Calque"}</span>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {layers.map((layer) => (
-                    <DropdownMenuItem
-                      key={layer.id}
-                      className={`flex items-center justify-between ${layer.id === activeLayerId ? 'bg-accent' : ''}`}
-                      onClick={() => setActiveLayerId(layer.id)}
-                    >
-                      <span>{layer.visible ? '👁️ ' : '🔒 '}{layer.name}</span>
-                      <div className="ml-2 space-x-2">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleLayerVisibility(layer.id);
-                          }}
-                          className="text-xs px-1 py-0.5"
-                        >
-                          {layer.visible ? 'Masquer' : 'Afficher'}
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleLayerLock(layer.id);
-                          }}
-                          className="text-xs px-1 py-0.5"
-                        >
-                          {layer.locked ? 'Déverrouiller' : 'Verrouiller'}
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeLayer(layer.id);
-                          }}
-                          className="text-xs text-red-500 px-1 py-0.5"
-                        >
-                          Supprimer
-                        </button>
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuItem onClick={addLayer} className="text-green-600">
-                    + Nouveau calque
+            <DropdownMenu>
+              <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
+                <Layers className="mr-2 h-4 w-4" />
+                <span>{layers.find(layer => layer.id === activeLayerId)?.name || "Calque"}</span>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {layers.map((layer) => (
+                  <DropdownMenuItem
+                    key={layer.id}
+                    className={`flex items-center justify-between ${layer.id === activeLayerId ? 'bg-accent' : ''}`}
+                    onClick={() => setActiveLayerId(layer.id)}
+                  >
+                    <span>{layer.visible ? '👁️ ' : '🔒 '}{layer.name}</span>
+                    <div className="ml-2 space-x-2">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleLayerVisibility(layer.id);
+                        }}
+                        className="text-xs px-1 py-0.5"
+                      >
+                        {layer.visible ? 'Masquer' : 'Afficher'}
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleLayerLock(layer.id);
+                        }}
+                        className="text-xs px-1 py-0.5"
+                      >
+                        {layer.locked ? 'Déverrouiller' : 'Verrouiller'}
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeLayer(layer.id);
+                        }}
+                        className="text-xs text-red-500 px-1 py-0.5"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
                   </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                ))}
+                <DropdownMenuItem onClick={addLayer} className="text-green-600">
+                  + Nouveau calque
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

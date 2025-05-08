@@ -216,31 +216,28 @@ export const Canvas: React.FC<CanvasProps> = ({
     const canvas = fabricCanvasRef.current;
     
     // Update visibility of objects based on layer visibility
-    if (layers && layers.length > 0) {
-      layers.forEach(layer => {
-        if (!layer) return;
+    layers.forEach(layer => {
+      if (!layer || !layer.objects) return;
+      
+      const layerObjects = layerObjectsMap.current.get(layer.id) || [];
+      
+      layerObjects.forEach(obj => {
+        // Skip if object no longer exists
+        if (!obj || !obj.canvas) return;
         
-        const layerObjects = layerObjectsMap.current.get(layer.id) || [];
+        // Only set objects visible/hidden based on layer visibility
+        // Instead of removing them when switching layers
+        obj.visible = layer.visible;
         
-        layerObjects.forEach(obj => {
-          // Skip if object no longer exists
-          if (!obj || !obj.canvas) return;
-          
-          // Update visibility based on layer visibility
-          obj.visible = layer.visible;
-          
-          // Update interactivity based on layer lock status and active layer
-          if (layer.locked || layer.id !== activeLayerId) {
-            obj.selectable = false;
-            obj.evented = false;
-          } else {
-            // Only make selectable if not in a drawing tool mode
-            obj.selectable = activeTool === "select";
-            obj.evented = activeTool === "select";
-          }
-        });
+        // Update interactivity based on layer lock status and active layer
+        const isActive = layer.id === activeLayerId;
+        
+        // Only enable selection on objects in the current active layer
+        // and only if we're in selection mode
+        obj.selectable = isActive && !layer.locked && activeTool === "select";
+        obj.evented = isActive && !layer.locked && activeTool === "select";
       });
-    }
+    });
     
     canvas.requestRenderAll();
     
@@ -547,16 +544,14 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         // Apply layer visibility
         if (layer) {
+          // Set visibility based on layer visibility 
+          // without removing from canvas
           obj.visible = layer.visible;
           
           // Apply layer lock and interactivity
-          if (layer.locked || objectLayerId !== activeLayerId) {
-            obj.selectable = false;
-            obj.evented = false;
-          } else {
-            obj.selectable = !isDrawingTool;
-            obj.evented = !isDrawingTool;
-          }
+          const isActive = objectLayerId === activeLayerId;
+          obj.selectable = isActive && !layer.locked && !isDrawingTool;
+          obj.evented = isActive && !layer.locked && !isDrawingTool;
         }
       } else {
         // Default behavior for objects not assigned to layers
@@ -746,7 +741,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         setLayers(prevLayers => 
           prevLayers.map(layer => 
             layer.id === activeLayerId 
-              ? { ...layer, objects: [...layer.objects, line] } 
+              ? { ...layer, objects: [...(layer.objects || []), line] } 
               : layer
           )
         );
