@@ -33,11 +33,11 @@ export const SidePanel: React.FC<SidePanelProps> = ({
   return (
     <div className="w-64 border-r p-4 space-y-6 bg-white h-full">
       <div>
-        <h3 className="text-sm font-semibold mb-2">Grid Settings</h3>
+        <h3 className="text-sm font-semibold mb-2">Paramètres de la grille</h3>
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex justify-between">
-              <Label htmlFor="grid-size">Grid Size</Label>
+              <Label htmlFor="grid-size">Taille de la grille</Label>
               <span className="text-xs text-muted-foreground">{gridSize}px</span>
             </div>
             <Slider
@@ -52,7 +52,7 @@ export const SidePanel: React.FC<SidePanelProps> = ({
           
           <div className="space-y-2">
             <div className="flex justify-between">
-              <Label htmlFor="grid-density">Grid Density</Label>
+              <Label htmlFor="grid-density">Densité de la grille</Label>
               <span className="text-xs text-muted-foreground">{gridDensity}</span>
             </div>
             <Slider
@@ -70,11 +70,11 @@ export const SidePanel: React.FC<SidePanelProps> = ({
       <Separator />
 
       <div>
-        <h3 className="text-sm font-semibold mb-2">Stroke Properties</h3>
+        <h3 className="text-sm font-semibold mb-2">Propriétés du trait</h3>
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex justify-between">
-              <Label htmlFor="stroke-width">Stroke Width</Label>
+              <Label htmlFor="stroke-width">Épaisseur du trait</Label>
               <span className="text-xs text-muted-foreground">{strokeWidth}px</span>
             </div>
             <Slider
@@ -88,7 +88,7 @@ export const SidePanel: React.FC<SidePanelProps> = ({
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="stroke-color">Stroke Color</Label>
+            <Label htmlFor="stroke-color">Couleur du trait</Label>
             <div className="flex gap-2">
               <div 
                 className="w-8 h-8 rounded border" 
@@ -109,9 +109,9 @@ export const SidePanel: React.FC<SidePanelProps> = ({
       <Separator />
 
       <div>
-        <h3 className="text-sm font-semibold mb-2">Fill Properties</h3>
+        <h3 className="text-sm font-semibold mb-2">Propriétés du remplissage</h3>
         <div className="space-y-2">
-          <Label htmlFor="fill-color">Fill Color</Label>
+          <Label htmlFor="fill-color">Couleur de remplissage</Label>
           <div className="flex gap-2">
             <div 
               className="w-8 h-8 rounded border" 
@@ -126,7 +126,7 @@ export const SidePanel: React.FC<SidePanelProps> = ({
             />
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Note: Fill will only be visible in the editor, not in print mode
+            Note: Le remplissage sera visible uniquement dans l'éditeur, pas en mode impression
           </p>
         </div>
       </div>

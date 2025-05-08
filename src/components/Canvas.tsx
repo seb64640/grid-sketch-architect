@@ -63,7 +63,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           activeObjects.forEach((obj) => canvas.remove(obj));
           canvas.discardActiveObject();
           canvas.requestRenderAll();
-          toast("Objects deleted");
+          toast("Objets supprimés");
         }
       } else if (e.key === "g" || e.key === "G") {
         // Toggle grid visibility
@@ -144,8 +144,10 @@ export const Canvas: React.FC<CanvasProps> = ({
     const isDrawingTool = tool !== "select" && tool !== "erase";
     
     canvas.getObjects().forEach((obj) => {
-      // Skip grid points
-      if (gridRef.current && gridRef.current.contains(obj)) {
+      // Skip grid points and make sure the grid is never selectable
+      if (gridRef.current && (gridRef.current.contains(obj) || obj === gridRef.current)) {
+        obj.selectable = false;
+        obj.evented = false;
         return;
       }
       
@@ -211,6 +213,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       selectable: false,
       evented: false,
       visible: gridVisible,
+      lockMovementX: true,
+      lockMovementY: true,
     });
 
     canvas.add(grid);
@@ -522,7 +526,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         y: pointer.y,
       });
       
-      const text = new fabric.IText("Edit text", {
+      const text = new fabric.IText("Modifiez ce texte", {
         left: snappedPoint.x,
         top: snappedPoint.y,
         fontSize: 16,

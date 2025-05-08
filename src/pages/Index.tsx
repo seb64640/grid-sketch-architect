@@ -5,7 +5,7 @@ const Index = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="bg-white border-b p-4">
-        <h1 className="text-2xl font-bold">Grid Sketch Architect</h1>
+        <h1 className="text-2xl font-bold">Architecte de Croquis sur Grille</h1>
         <p className="text-sm text-gray-500">
           Dessinez des plans techniques précis en utilisant une grille de points
         </p>

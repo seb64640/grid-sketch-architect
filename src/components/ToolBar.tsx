@@ -51,7 +51,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         variant={activeTool === "select" ? "default" : "outline"}
         onClick={() => setActiveTool("select")}
         className="h-9 w-9 p-0"
-        title="Select (V)"
+        title="Sélectionner (V)"
       >
         <Move size={18} />
       </Button>
@@ -61,7 +61,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         variant={activeTool === "line" ? "default" : "outline"}
         onClick={() => setActiveTool("line")}
         className="h-9 w-9 p-0"
-        title="Line (L)"
+        title="Ligne (L)"
       >
         <MoveHorizontal size={18} />
       </Button>
@@ -71,7 +71,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         variant={activeTool === "circle" ? "default" : "outline"}
         onClick={() => setActiveTool("circle")}
         className="h-9 w-9 p-0"
-        title="Circle (C)"
+        title="Cercle (C)"
       >
         <Circle size={18} />
       </Button>
@@ -91,7 +91,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         variant={activeTool === "text" ? "default" : "outline"}
         onClick={() => setActiveTool("text")}
         className="h-9 w-9 p-0"
-        title="Text (T)"
+        title="Texte (T)"
       >
         <Text size={18} />
       </Button>
@@ -101,7 +101,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         variant={activeTool === "erase" ? "default" : "outline"}
         onClick={() => setActiveTool("erase")}
         className="h-9 w-9 p-0"
-        title="Erase (E)"
+        title="Effacer (E)"
       >
         <Trash2 size={18} />
       </Button>
@@ -113,7 +113,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         variant={gridVisible ? "default" : "outline"}
         onClick={toggleGridVisibility}
         className="h-9 w-9 p-0"
-        title="Toggle Grid Visibility (G)"
+        title="Afficher/Masquer la grille (G)"
       >
         <SquareDashed size={18} />
       </Button>
@@ -123,7 +123,7 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         variant={snapToGrid ? "default" : "outline"}
         onClick={toggleSnapToGrid}
         className="h-9 w-9 p-0"
-        title="Toggle Snap to Grid (S)"
+        title="Aligner sur la grille (S)"
       >
         <CircleDashed size={18} />
       </Button>
@@ -135,9 +135,9 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         variant="outline"
         onClick={clearCanvas}
         className="h-9"
-        title="Clear Canvas"
+        title="Effacer tout"
       >
-        Clear
+        Effacer
       </Button>
       
       <Button
@@ -145,9 +145,9 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         variant="outline"
         onClick={printMode}
         className="h-9"
-        title="Print View"
+        title="Vue impression"
       >
-        Print
+        Imprimer
       </Button>
     </div>
   );
