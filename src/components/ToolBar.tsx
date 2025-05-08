@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,8 +9,6 @@ import {
   MoveHorizontal,
   CircleDashed,
   SquareDashed,
-  Undo2,
-  Redo2,
   ArrowUpRight
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
@@ -41,14 +40,12 @@ interface ToolBarProps {
 export const ToolBar: React.FC<ToolBarProps> = ({
   activeTool,
   gridVisible,
-  snapToGrid,
   setActiveTool,
   toggleGridVisibility,
-  toggleSnapToGrid,
   clearCanvas,
   printMode,
-  undoAction,
-  redoAction,
+  // Les paramètres snapToGrid, toggleSnapToGrid, undoAction, redoAction sont toujours
+  // reçus mais ne seront plus utilisés dans l'interface
 }) => {
   return (
     <div className="p-2 bg-white border-b flex items-center gap-1 flex-wrap">
@@ -126,44 +123,12 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       
       <Button
         size="sm"
-        variant="outline"
-        onClick={() => undoAction()}
-        className="h-9 w-9 p-0"
-        title="Annuler (Ctrl+Z)"
-      >
-        <Undo2 size={18} />
-      </Button>
-      
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => redoAction()}
-        className="h-9 w-9 p-0"
-        title="Rétablir (Ctrl+Y)"
-      >
-        <Redo2 size={18} />
-      </Button>
-      
-      <Separator orientation="vertical" className="mx-2 h-8" />
-      
-      <Button
-        size="sm"
         variant={gridVisible ? "default" : "outline"}
         onClick={toggleGridVisibility}
         className="h-9 w-9 p-0"
         title="Afficher/Masquer la grille (G)"
       >
         <SquareDashed size={18} />
-      </Button>
-      
-      <Button
-        size="sm"
-        variant={snapToGrid ? "default" : "outline"}
-        onClick={toggleSnapToGrid}
-        className="h-9 w-9 p-0"
-        title="Aligner sur la grille (S)"
-      >
-        <CircleDashed size={18} />
       </Button>
       
       <Separator orientation="vertical" className="mx-2 h-8" />
