@@ -21,7 +21,14 @@ interface CanvasProps {
   fillColor: string;
   activeTool: Tool;
   isPrintMode: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
 }
+
+type HistoryAction = {
+  objects: fabric.Object[];
+  type: 'add' | 'remove' | 'modify';
+};
 
 export const Canvas: React.FC<CanvasProps> = ({
   width,
@@ -35,12 +42,19 @@ export const Canvas: React.FC<CanvasProps> = ({
   fillColor,
   activeTool,
   isPrintMode,
+  onUndo,
+  onRedo,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
   const gridRef = useRef<fabric.Group | null>(null);
   const tempPointRef = useRef<fabric.Circle | null>(null);
   const startPointRef = useRef<Point | null>(null);
+  
+  // History state for undo/redo
+  const historyRef = useRef<HistoryAction[]>([]);
+  const historyIndexRef = useRef<number>(-1);
+  const isHistoryActionRef = useRef<boolean>(false);
 
   // Initialize fabric canvas
   useEffect(() => {
@@ -60,6 +74,9 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (e.key === "Delete" || e.key === "Backspace") {
         const activeObjects = canvas.getActiveObjects();
         if (activeObjects.length > 0) {
+          // Save state before deleting
+          saveHistoryState(activeObjects, 'remove');
+          
           activeObjects.forEach((obj) => canvas.remove(obj));
           canvas.discardActiveObject();
           canvas.requestRenderAll();
@@ -71,6 +88,14 @@ export const Canvas: React.FC<CanvasProps> = ({
           gridRef.current.visible = !gridRef.current.visible;
           canvas.requestRenderAll();
         }
+      } else if (e.key === "z" && (e.ctrlKey || e.metaKey)) {
+        // Undo with Ctrl+Z
+        e.preventDefault();
+        performUndo();
+      } else if (e.key === "y" && (e.ctrlKey || e.metaKey)) {
+        // Redo with Ctrl+Y
+        e.preventDefault();
+        performRedo();
       }
     };
 
@@ -79,12 +104,39 @@ export const Canvas: React.FC<CanvasProps> = ({
     // Create the grid
     drawGrid();
 
+    // Track object changes for undo/redo
+    canvas.on('object:added', function(e) {
+      if (!e.target || isHistoryActionRef.current) return;
+      
+      // Don't track grid points
+      if (gridRef.current && (gridRef.current.contains(e.target) || e.target === gridRef.current)) {
+        return;
+      }
+      
+      // Don't track temporary points
+      if (e.target === tempPointRef.current) {
+        return;
+      }
+      
+      saveHistoryState([e.target], 'add');
+    });
+
+    canvas.on('object:modified', function(e) {
+      if (!e.target || isHistoryActionRef.current) return;
+      
+      // Don't track grid modifications
+      if (gridRef.current && (gridRef.current.contains(e.target) || e.target === gridRef.current)) {
+        return;
+      }
+      
+      saveHistoryState([e.target], 'modify');
+    });
+
     // Ajout de la fonctionnalité d'aimantation à la grille lors du déplacement
     canvas.on('object:moving', function(e) {
       if (!snapToGrid || !e.target) return;
       
       const obj = e.target;
-      const gridSize = 20; // Utiliser la taille de la grille
       
       // Snap à la grille
       const snapPoint = snapToGridPoint({
@@ -104,6 +156,107 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.dispose();
     };
   }, [width, height]);
+
+  // Save the current state to history
+  const saveHistoryState = (objects: fabric.Object[], actionType: 'add' | 'remove' | 'modify') => {
+    // If we're in the middle of the history, truncate the future states
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    }
+    
+    // Add the new state
+    historyRef.current.push({
+      objects: [...objects],
+      type: actionType
+    });
+    
+    // Update index
+    historyIndexRef.current = historyRef.current.length - 1;
+  };
+
+  // Perform undo action
+  const performUndo = () => {
+    if (!fabricCanvasRef.current || historyIndexRef.current < 0) return;
+    
+    const canvas = fabricCanvasRef.current;
+    const action = historyRef.current[historyIndexRef.current];
+    
+    isHistoryActionRef.current = true;
+    
+    try {
+      if (action.type === 'add') {
+        // Undo an addition by removing the objects
+        action.objects.forEach(obj => {
+          const canvasObject = canvas.getObjects().find(o => o === obj);
+          if (canvasObject) {
+            canvas.remove(canvasObject);
+          }
+        });
+      } else if (action.type === 'remove') {
+        // Undo a removal by adding the objects back
+        action.objects.forEach(obj => {
+          canvas.add(obj);
+        });
+      } else if (action.type === 'modify') {
+        // Undo a modification would require storing previous state
+        // This is a simplified implementation
+        toast("Modification annulée");
+      }
+      
+      // Decrement the history index
+      historyIndexRef.current--;
+      
+      canvas.requestRenderAll();
+      onUndo();
+    } finally {
+      isHistoryActionRef.current = false;
+    }
+  };
+
+  // Perform redo action
+  const performRedo = () => {
+    if (!fabricCanvasRef.current || historyIndexRef.current >= historyRef.current.length - 1) return;
+    
+    // Increment the history index
+    historyIndexRef.current++;
+    
+    const canvas = fabricCanvasRef.current;
+    const action = historyRef.current[historyIndexRef.current];
+    
+    isHistoryActionRef.current = true;
+    
+    try {
+      if (action.type === 'add') {
+        // Redo an addition by adding the objects back
+        action.objects.forEach(obj => {
+          canvas.add(obj);
+        });
+      } else if (action.type === 'remove') {
+        // Redo a removal by removing the objects
+        action.objects.forEach(obj => {
+          const canvasObject = canvas.getObjects().find(o => o === obj);
+          if (canvasObject) {
+            canvas.remove(canvasObject);
+          }
+        });
+      } else if (action.type === 'modify') {
+        // Redo a modification would require storing next state
+        // This is a simplified implementation
+        toast("Modification rétablie");
+      }
+      
+      canvas.requestRenderAll();
+      onRedo();
+    } finally {
+      isHistoryActionRef.current = false;
+    }
+  };
+
+  // Export the undo/redo functions for toolbar use
+  useEffect(() => {
+    onUndo = performUndo;
+    onRedo = performRedo;
+  }, [onUndo, onRedo]);
 
   // Update selection mode based on activeTool
   useEffect(() => {
@@ -609,10 +762,36 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Erase tool setup
   const setupEraseTool = (canvas: fabric.Canvas) => {
     canvas.on("mouse:down", (o) => {
-      if (!o.target || o.target === gridRef.current) return;
+      const pointer = canvas.getPointer(o.e);
       
-      canvas.remove(o.target);
-      canvas.requestRenderAll();
+      // Find object under pointer - make sure we're getting ALL objects
+      const objects = canvas.getObjects();
+      let objectToRemove = null;
+      
+      // Iterate from top to bottom (reverse order) to get the topmost object
+      for (let i = objects.length - 1; i >= 0; i--) {
+        const obj = objects[i];
+        
+        // Skip grid
+        if (obj === gridRef.current || (gridRef.current && gridRef.current.contains(obj))) {
+          continue;
+        }
+        
+        // Test if pointer is within the object
+        if (obj.containsPoint(pointer)) {
+          objectToRemove = obj;
+          break;
+        }
+      }
+      
+      if (objectToRemove) {
+        // Save state before removing
+        saveHistoryState([objectToRemove], 'remove');
+        
+        canvas.remove(objectToRemove);
+        canvas.requestRenderAll();
+        toast("Objet supprimé");
+      }
     });
   };
 

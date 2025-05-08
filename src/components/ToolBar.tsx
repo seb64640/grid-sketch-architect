@@ -9,7 +9,9 @@ import {
   Trash2,
   MoveHorizontal,
   CircleDashed,
-  SquareDashed
+  SquareDashed,
+  Undo2,
+  Redo2
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 
@@ -32,6 +34,8 @@ interface ToolBarProps {
   toggleSnapToGrid: () => void;
   clearCanvas: () => void;
   printMode: () => void;
+  undoAction: () => void;
+  redoAction: () => void;
 }
 
 export const ToolBar: React.FC<ToolBarProps> = ({
@@ -43,6 +47,8 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   toggleSnapToGrid,
   clearCanvas,
   printMode,
+  undoAction,
+  redoAction,
 }) => {
   return (
     <div className="p-2 bg-white border-b flex items-center gap-1 flex-wrap">
@@ -104,6 +110,28 @@ export const ToolBar: React.FC<ToolBarProps> = ({
         title="Effacer (E)"
       >
         <Trash2 size={18} />
+      </Button>
+      
+      <Separator orientation="vertical" className="mx-2 h-8" />
+      
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={undoAction}
+        className="h-9 w-9 p-0"
+        title="Annuler (Ctrl+Z)"
+      >
+        <Undo2 size={18} />
+      </Button>
+      
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={redoAction}
+        className="h-9 w-9 p-0"
+        title="Rétablir (Ctrl+Y)"
+      >
+        <Redo2 size={18} />
       </Button>
       
       <Separator orientation="vertical" className="mx-2 h-8" />

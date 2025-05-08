@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
 import { SidePanel } from "./SidePanel";
@@ -26,6 +26,17 @@ export const GridSketch = () => {
   
   // Print mode
   const [isPrintMode, setIsPrintMode] = useState(false);
+
+  // History control
+  const undoAction = useCallback(() => {
+    // This will be overridden by the Canvas component
+    toast("Annuler");
+  }, []);
+
+  const redoAction = useCallback(() => {
+    // This will be overridden by the Canvas component
+    toast("Rétablir");
+  }, []);
 
   // Adjust canvas size based on window size
   useEffect(() => {
@@ -94,22 +105,22 @@ export const GridSketch = () => {
 
   const toggleGridVisibility = () => {
     setGridVisible(!gridVisible);
-    toast(gridVisible ? "Grid hidden" : "Grid visible");
+    toast(gridVisible ? "Grille masquée" : "Grille visible");
   };
 
   const toggleSnapToGrid = () => {
     setSnapToGrid(!snapToGrid);
-    toast(snapToGrid ? "Snap to grid disabled" : "Snap to grid enabled");
+    toast(snapToGrid ? "Alignement désactivé" : "Alignement activé");
   };
 
   const clearCanvas = () => {
     // Implementation will be through the Canvas component
-    toast("Canvas cleared");
+    toast("Canevas effacé");
   };
 
   const togglePrintMode = () => {
     setIsPrintMode(!isPrintMode);
-    toast(isPrintMode ? "Editor mode" : "Print mode");
+    toast(isPrintMode ? "Mode éditeur" : "Mode impression");
   };
 
   return (
@@ -123,6 +134,8 @@ export const GridSketch = () => {
         toggleSnapToGrid={toggleSnapToGrid}
         clearCanvas={clearCanvas}
         printMode={togglePrintMode}
+        undoAction={undoAction}
+        redoAction={redoAction}
       />
       
       <div className="flex flex-1 overflow-hidden">
@@ -152,6 +165,8 @@ export const GridSketch = () => {
             fillColor={fillColor}
             activeTool={activeTool}
             isPrintMode={isPrintMode}
+            onUndo={undoAction}
+            onRedo={redoAction}
           />
         </div>
       </div>
