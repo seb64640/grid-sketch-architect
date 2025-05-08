@@ -148,6 +148,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       if (gridRef.current && (gridRef.current.contains(obj) || obj === gridRef.current)) {
         obj.selectable = false;
         obj.evented = false;
+        obj.lockMovementX = true;
+        obj.lockMovementY = true;
         return;
       }
       
@@ -159,7 +161,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Update grid when grid properties change
   useEffect(() => {
     drawGrid();
-  }, [gridSize, gridDensity, gridVisible]);
+  }, [gridSize, gridVisible]);
 
   // Update print mode
   useEffect(() => {
@@ -271,7 +273,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         [snappedPoint.x, snappedPoint.y, snappedPoint.x, snappedPoint.y],
         {
           stroke: strokeColor,
-          strokeWidth: strokeWidth,
+          strokeWidth: strokeWidth, // Utilise l'épaisseur définie
           selectable: false, // Make it non-selectable while drawing
           evented: false,    // Prevent events while drawing
         }
@@ -312,7 +314,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         line.y1 === line.y2
       ) {
         canvas.remove(line);
-        toast("Line canceled - zero length");
+        toast("Ligne annulée - longueur nulle");
       } else {
         // Now make the line selectable for future interactions
         line.set({
@@ -364,7 +366,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         top: snappedPoint.y,
         radius: 0,
         stroke: strokeColor,
-        strokeWidth: strokeWidth,
+        strokeWidth: strokeWidth, // Utilise l'épaisseur définie
         fill: fillColor,
         opacity: 0.5,
         originX: 'center',
@@ -460,7 +462,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         width: 0,
         height: 0,
         stroke: strokeColor,
-        strokeWidth: strokeWidth,
+        strokeWidth: strokeWidth, // Utilise l'épaisseur définie
         fill: fillColor,
         opacity: 0.5,
         selectable: false, // Make it non-selectable while drawing

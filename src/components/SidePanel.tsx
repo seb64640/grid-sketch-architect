@@ -50,20 +50,7 @@ export const SidePanel: React.FC<SidePanelProps> = ({
             />
           </div>
           
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <Label htmlFor="grid-density">Densité de la grille</Label>
-              <span className="text-xs text-muted-foreground">{gridDensity}</span>
-            </div>
-            <Slider
-              id="grid-density"
-              min={5}
-              max={30}
-              step={1}
-              value={[gridDensity]}
-              onValueChange={(value) => setGridDensity(value[0])}
-            />
-          </div>
+          {/* La densité de la grille a été supprimée ici */}
         </div>
       </div>
 

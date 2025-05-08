@@ -17,7 +17,7 @@ export const GridSketch = () => {
   const [gridVisible, setGridVisible] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [gridSize, setGridSize] = useState(20);
-  const [gridDensity, setGridDensity] = useState(20);
+  const [gridDensity, setGridDensity] = useState(20); // On garde la variable mais on ne l'utilise plus dans l'interface
   
   // Style settings
   const [strokeWidth, setStrokeWidth] = useState(2);
