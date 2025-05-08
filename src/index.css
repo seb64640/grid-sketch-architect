@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -33,22 +34,6 @@
     --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
@@ -79,14 +64,15 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  /* Custom variables for the grid sketch app */
+  :root {
+    --grid-color: 210 20% 90%;
+    --grid-point-color: 210 20% 70%;
+    --line-color: 0 0% 20%;
+    --selected-color: 210 100% 60%;
+    --text-color: 0 0% 20%;
   }
 }
 
@@ -97,5 +83,42 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Custom styles for the grid sketch app */
+.canvas-container {
+  margin: 0 auto;
+  position: relative;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  background-color: white;
+}
+
+.grid-point {
+  fill: hsl(var(--grid-point-color));
+  r: 2;
+}
+
+.grid-point.hover {
+  r: 4;
+  fill: hsl(var(--selected-color));
+}
+
+.no-select {
+  user-select: none;
+}
+
+/* Hide grid and points when printing */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+  
+  body {
+    background-color: white;
   }
 }
