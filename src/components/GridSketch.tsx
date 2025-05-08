@@ -2,7 +2,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
-import { SidePanel } from "./SidePanel";
 import { toast } from "sonner";
 
 export const GridSketch = () => {
@@ -17,7 +16,7 @@ export const GridSketch = () => {
   const [gridVisible, setGridVisible] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [gridSize, setGridSize] = useState(20);
-  const [gridDensity, setGridDensity] = useState(20); // On garde la variable mais on ne l'utilise plus dans l'interface
+  const [gridDensity, setGridDensity] = useState(20);
   
   // Style settings
   const [strokeWidth, setStrokeWidth] = useState(2);
@@ -136,39 +135,28 @@ export const GridSketch = () => {
         printMode={togglePrintMode}
         undoAction={undoAction}
         redoAction={redoAction}
+        gridSize={gridSize}
+        setGridSize={setGridSize}
+        strokeColor={strokeColor}
+        setStrokeColor={setStrokeColor}
       />
       
-      <div className="flex flex-1 overflow-hidden">
-        <SidePanel
+      <div className="flex-1 p-4 overflow-auto bg-gray-100 canvas-container-wrapper">
+        <Canvas
+          width={canvasWidth}
+          height={canvasHeight}
           gridSize={gridSize}
-          setGridSize={setGridSize}
           gridDensity={gridDensity}
-          setGridDensity={setGridDensity}
+          gridVisible={gridVisible}
+          snapToGrid={snapToGrid}
           strokeWidth={strokeWidth}
-          setStrokeWidth={setStrokeWidth}
           strokeColor={strokeColor}
-          setStrokeColor={setStrokeColor}
           fillColor={fillColor}
-          setFillColor={setFillColor}
+          activeTool={activeTool}
+          isPrintMode={isPrintMode}
+          onUndo={undoAction}
+          onRedo={redoAction}
         />
-        
-        <div className="flex-1 p-4 overflow-auto bg-gray-100 canvas-container-wrapper">
-          <Canvas
-            width={canvasWidth}
-            height={canvasHeight}
-            gridSize={gridSize}
-            gridDensity={gridDensity}
-            gridVisible={gridVisible}
-            snapToGrid={snapToGrid}
-            strokeWidth={strokeWidth}
-            strokeColor={strokeColor}
-            fillColor={fillColor}
-            activeTool={activeTool}
-            isPrintMode={isPrintMode}
-            onUndo={undoAction}
-            onRedo={redoAction}
-          />
-        </div>
       </div>
     </div>
   );
