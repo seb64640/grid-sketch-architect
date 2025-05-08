@@ -1,8 +1,4 @@
-
 import React from "react";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
 import { Separator } from "@/components/ui/separator";
 
 interface SidePanelProps {
@@ -32,90 +28,27 @@ export const SidePanel: React.FC<SidePanelProps> = ({
 }) => {
   return (
     <div className="w-64 border-r p-4 space-y-6 bg-white h-full">
-      <div>
-        <h3 className="text-sm font-semibold mb-2">Paramètres de la grille</h3>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <Label htmlFor="grid-size">Taille de la grille</Label>
-              <span className="text-xs text-muted-foreground">{gridSize}px</span>
-            </div>
-            <Slider
-              id="grid-size"
-              min={10}
-              max={50}
-              step={5}
-              value={[gridSize]}
-              onValueChange={(value) => setGridSize(value[0])}
-            />
-          </div>
-          
-          {/* La densité de la grille a été supprimée ici */}
-        </div>
+      <div className="text-center p-4">
+        <h2 className="text-lg font-semibold">Architecte de Croquis sur Grille</h2>
+        <p className="text-sm text-muted-foreground mt-2">
+          Utilisez les outils dans la barre supérieure pour créer votre dessin technique.
+        </p>
       </div>
-
+      
       <Separator />
-
-      <div>
-        <h3 className="text-sm font-semibold mb-2">Propriétés du trait</h3>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <Label htmlFor="stroke-width">Épaisseur du trait</Label>
-              <span className="text-xs text-muted-foreground">{strokeWidth}px</span>
-            </div>
-            <Slider
-              id="stroke-width"
-              min={1}
-              max={10}
-              step={1}
-              value={[strokeWidth]}
-              onValueChange={(value) => setStrokeWidth(value[0])}
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="stroke-color">Couleur du trait</Label>
-            <div className="flex gap-2">
-              <div 
-                className="w-8 h-8 rounded border" 
-                style={{ backgroundColor: strokeColor }}
-              />
-              <Input
-                id="stroke-color"
-                type="color"
-                value={strokeColor}
-                onChange={(e) => setStrokeColor(e.target.value)}
-                className="w-full h-8"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <Separator />
-
-      <div>
-        <h3 className="text-sm font-semibold mb-2">Propriétés du remplissage</h3>
-        <div className="space-y-2">
-          <Label htmlFor="fill-color">Couleur de remplissage</Label>
-          <div className="flex gap-2">
-            <div 
-              className="w-8 h-8 rounded border" 
-              style={{ backgroundColor: fillColor }}
-            />
-            <Input
-              id="fill-color"
-              type="color"
-              value={fillColor}
-              onChange={(e) => setFillColor(e.target.value)}
-              className="w-full h-8"
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Note: Le remplissage sera visible uniquement dans l'éditeur, pas en mode impression
-          </p>
-        </div>
+      
+      <div className="text-sm">
+        <h3 className="font-medium mb-2">Raccourcis clavier:</h3>
+        <ul className="space-y-1">
+          <li><span className="font-mono bg-gray-100 px-1">V</span> - Sélection</li>
+          <li><span className="font-mono bg-gray-100 px-1">L</span> - Ligne</li>
+          <li><span className="font-mono bg-gray-100 px-1">F</span> - Flèche</li>
+          <li><span className="font-mono bg-gray-100 px-1">C</span> - Cercle</li>
+          <li><span className="font-mono bg-gray-100 px-1">R</span> - Rectangle</li>
+          <li><span className="font-mono bg-gray-100 px-1">T</span> - Texte</li>
+          <li><span className="font-mono bg-gray-100 px-1">E</span> - Effacer</li>
+          <li><span className="font-mono bg-gray-100 px-1">G</span> - Afficher/Masquer grille</li>
+        </ul>
       </div>
     </div>
   );

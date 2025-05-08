@@ -9,9 +9,19 @@ import {
   MoveHorizontal,
   CircleDashed,
   SquareDashed,
-  ArrowUpRight
+  ArrowUpRight,
+  Grid3X3,
+  Paintbrush
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import { 
+  Popover,
+  PopoverContent,
+  PopoverTrigger 
+} from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
 
 export type Tool = 
   | "select" 
@@ -35,6 +45,10 @@ interface ToolBarProps {
   printMode: () => void;
   undoAction: () => void;
   redoAction: () => void;
+  gridSize: number;
+  setGridSize: (size: number) => void;
+  strokeColor: string;
+  setStrokeColor: (color: string) => void;
 }
 
 export const ToolBar: React.FC<ToolBarProps> = ({
@@ -44,6 +58,10 @@ export const ToolBar: React.FC<ToolBarProps> = ({
   toggleGridVisibility,
   clearCanvas,
   printMode,
+  gridSize,
+  setGridSize,
+  strokeColor,
+  setStrokeColor,
   // Les paramètres snapToGrid, toggleSnapToGrid, undoAction, redoAction sont toujours
   // reçus mais ne seront plus utilisés dans l'interface
 }) => {
@@ -121,15 +139,60 @@ export const ToolBar: React.FC<ToolBarProps> = ({
       
       <Separator orientation="vertical" className="mx-2 h-8" />
       
-      <Button
-        size="sm"
-        variant={gridVisible ? "default" : "outline"}
-        onClick={toggleGridVisibility}
-        className="h-9 w-9 p-0"
-        title="Afficher/Masquer la grille (G)"
-      >
-        <SquareDashed size={18} />
-      </Button>
+      {/* Popover pour les paramètres de la grille */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            size="sm"
+            variant={gridVisible ? "default" : "outline"}
+            onClick={toggleGridVisibility}
+            className="h-9 w-9 p-0"
+            title="Afficher/Masquer la grille (G)"
+          >
+            <SquareDashed size={18} />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-3">
+          <div className="space-y-2">
+            <Label htmlFor="grid-size">Taille de la grille: {gridSize}px</Label>
+            <Slider
+              id="grid-size"
+              min={10}
+              max={50}
+              step={5}
+              value={[gridSize]}
+              onValueChange={(value) => setGridSize(value[0])}
+              className="w-full"
+            />
+          </div>
+        </PopoverContent>
+      </Popover>
+      
+      {/* Popover pour la couleur du trait */}
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-9 w-9 p-0 relative"
+            title="Couleur du trait"
+          >
+            <Paintbrush size={18} />
+            <div 
+              className="absolute bottom-0 right-0 w-3 h-3 rounded-full border"
+              style={{ backgroundColor: strokeColor }}
+            />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-2">
+          <Input
+            type="color"
+            value={strokeColor}
+            onChange={(e) => setStrokeColor(e.target.value)}
+            className="w-full h-8"
+          />
+        </PopoverContent>
+      </Popover>
       
       <Separator orientation="vertical" className="mx-2 h-8" />
       
