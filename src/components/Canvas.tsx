@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -256,15 +255,25 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   };
 
-  // Make undo/redo functions available to parent components
+  // Update the parent component's onUndo and onRedo functions
   useEffect(() => {
-    if (typeof onUndo === 'function') {
-      onUndo = () => performUndo();
+    // Create direct references to the functions to be used externally
+    if (onUndo) {
+      // Override with our implementation
+      const parentUndo = onUndo;
+      parentUndo.call = () => {
+        performUndo();
+      };
     }
-    if (typeof onRedo === 'function') {
-      onRedo = () => performRedo();
+    
+    if (onRedo) {
+      // Override with our implementation
+      const parentRedo = onRedo;
+      parentRedo.call = () => {
+        performRedo();
+      };
     }
-  }, [onUndo, onRedo]);
+  }, []);
 
   // Update selection mode based on activeTool
   useEffect(() => {
@@ -765,6 +774,9 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.setActiveObject(text);
       text.enterEditing();
       text.selectAll();
+      
+      // Save to history after adding
+      saveHistoryState([text], 'add');
       
       canvas.requestRenderAll();
     });
