@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -54,9 +55,19 @@ export const Canvas: React.FC<CanvasProps> = ({
   setLayers,
   updateLayerObjects,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
+  // Référence pour le conteneur de canvas
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  
+  // Références pour chaque calque canvas et leur contexte Fabric
+  const layerCanvasRefs = useRef<Map<string, HTMLCanvasElement>>(new Map());
+  const fabricCanvasesRef = useRef<Map<string, fabric.Canvas>>(new Map());
+  
+  // Canvas de grille séparé
+  const gridCanvasRef = useRef<HTMLCanvasElement>(null);
+  const gridFabricCanvasRef = useRef<fabric.Canvas | null>(null);
   const gridRef = useRef<fabric.Group | null>(null);
+  
+  // Références pour le dessin
   const tempPointRef = useRef<fabric.Circle | null>(null);
   const startPointRef = useRef<Point | null>(null);
   
@@ -67,494 +78,263 @@ export const Canvas: React.FC<CanvasProps> = ({
   const historyRef = useRef<HistoryAction[]>([]);
   const historyIndexRef = useRef<number>(-1);
   const isHistoryActionRef = useRef<boolean>(false);
-
-  // Track which objects belong to which layer
-  const layerObjectsMap = useRef<Map<string, fabric.Object[]>>(new Map());
-  
-  // Flag to prevent excessive re-renders
-  const isLayerUpdateInProgress = useRef<boolean>(false);
   
   // Debug flag
   const debugMode = useRef<boolean>(true);
 
-  // Initialize fabric canvas
+  // Gestion de l'état des objets actuellement en cours de dessin
+  const [currentDrawingObjects, setCurrentDrawingObjects] = useState<{
+    layerId: string;
+    object: fabric.Object | null;
+  }>({
+    layerId: '',
+    object: null,
+  });
+
+  // Initialize canvas layers
   useEffect(() => {
-    if (!canvasRef.current) return;
-
-    console.log("Initializing fabric canvas");
-    const canvas = new fabric.Canvas(canvasRef.current, {
-      width,
-      height,
-      selection: activeTool === "select",
-      backgroundColor: "#ffffff",
-      preserveObjectStacking: true, // Maintenir l'ordre d'empilement des objets
-    });
-
-    fabricCanvasRef.current = canvas;
-    
-    // Initialize the layer objects map with empty arrays for each layer
-    if (layers && layers.length > 0) {
-      console.log(`Initializing layers map with ${layers.length} layers`);
-      layers.forEach(layer => {
-        layerObjectsMap.current.set(layer.id, []);
-        if (debugMode.current) {
-          console.log(`Added layer to map: ${layer.id} (${layer.name})`);
-        }
+    // Créer le canvas de grille
+    if (gridCanvasRef.current && !gridFabricCanvasRef.current) {
+      const gridCanvas = new fabric.Canvas(gridCanvasRef.current, {
+        width,
+        height,
+        selection: false,
+        backgroundColor: "transparent",
+        renderOnAddRemove: false,
       });
+      gridFabricCanvasRef.current = gridCanvas;
+      drawGrid();
     }
+    
+    return () => {
+      // Nettoyer le canvas de grille
+      if (gridFabricCanvasRef.current) {
+        gridFabricCanvasRef.current.dispose();
+      }
+    };
+  }, []);
 
-    // Add key event listeners
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Delete" || e.key === "Backspace") {
-        const activeObjects = canvas.getActiveObjects();
-        if (activeObjects.length > 0) {
-          // Save state before deleting
-          saveHistoryState(activeObjects, 'remove', activeLayerId);
-          
-          activeObjects.forEach((obj) => {
-            canvas.remove(obj);
-            
-            // Remove from all layers
-            for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
-              const index = layerObjects.indexOf(obj);
-              if (index >= 0) {
-                layerObjects.splice(index, 1);
-                if (debugMode.current) {
-                  console.log(`Removed object from layer ${layerId}`);
-                }
-                break;
-              }
+  // Créer ou mettre à jour les canvas pour chaque calque
+  useEffect(() => {
+    if (!canvasContainerRef.current) return;
+    
+    console.log(`Initializing ${layers.length} canvas layers`);
+    
+    // Supprimer les canvas des calques qui n'existent plus
+    const existingLayerIds = new Set(layers.map(layer => layer.id));
+    const canvasesToRemove: string[] = [];
+    
+    fabricCanvasesRef.current.forEach((canvas, layerId) => {
+      if (!existingLayerIds.has(layerId)) {
+        console.log(`Removing canvas for deleted layer ${layerId}`);
+        canvas.dispose();
+        canvasesToRemove.push(layerId);
+      }
+    });
+    
+    canvasesToRemove.forEach(id => fabricCanvasesRef.current.delete(id));
+    
+    // Créer ou configurer les canvas pour chaque calque
+    layers.forEach(layer => {
+      const existingCanvas = fabricCanvasesRef.current.get(layer.id);
+      
+      if (existingCanvas) {
+        // Mettre à jour le canvas existant
+        console.log(`Updating canvas for layer ${layer.id} (${layer.name})`);
+        existingCanvas.selection = layer.id === activeLayerId && activeTool === "select" && !layer.locked;
+        
+        // Mettre à jour la visibilité du canvas
+        const canvasElement = layerCanvasRefs.current.get(layer.id);
+        if (canvasElement) {
+          canvasElement.style.display = layer.visible ? 'block' : 'none';
+        }
+      } else {
+        // Créer un nouveau canvas pour ce calque
+        console.log(`Creating new canvas for layer ${layer.id} (${layer.name})`);
+        
+        // Créer l'élément canvas
+        const canvasElement = document.createElement('canvas');
+        canvasElement.width = width;
+        canvasElement.height = height;
+        canvasElement.style.position = 'absolute';
+        canvasElement.style.top = '0';
+        canvasElement.style.left = '0';
+        canvasElement.style.pointerEvents = layer.id === activeLayerId && !layer.locked ? 'auto' : 'none';
+        canvasElement.style.display = layer.visible ? 'block' : 'none';
+        canvasElement.id = `canvas-layer-${layer.id}`;
+        canvasElement.dataset.layerId = layer.id;
+        
+        // Ajouter l'élément canvas au conteneur
+        canvasContainerRef.current.appendChild(canvasElement);
+        
+        // Créer une instance Fabric pour ce canvas
+        const fabricCanvas = new fabric.Canvas(canvasElement, {
+          width,
+          height,
+          selection: layer.id === activeLayerId && activeTool === "select" && !layer.locked,
+          backgroundColor: "transparent",
+          renderOnAddRemove: true,
+          preserveObjectStacking: true,
+        });
+        
+        // Stocker les références
+        layerCanvasRefs.current.set(layer.id, canvasElement);
+        fabricCanvasesRef.current.set(layer.id, fabricCanvas);
+        
+        // Restaurer les objets du calque si présents
+        if (layer.objects && layer.objects.length > 0) {
+          console.log(`Restoring ${layer.objects.length} objects for layer ${layer.id}`);
+          layer.objects.forEach(obj => {
+            if (obj && typeof obj.set === 'function') {
+              // C'est un objet Fabric valide, l'ajouter au canvas
+              fabricCanvas.add(obj);
             }
           });
-          
-          // Update layers state
-          updateLayersWithObjects();
-          
-          canvas.discardActiveObject();
-          canvas.requestRenderAll();
-          toast("Objets supprimés");
+          fabricCanvas.requestRenderAll();
         }
-      } else if (e.key === "g" || e.key === "G") {
-        // Toggle grid visibility
-        if (gridRef.current) {
-          gridRef.current.visible = !gridRef.current.visible;
-          canvas.requestRenderAll();
+        
+        // Configurer les événements pour ce canvas
+        if (layer.id === activeLayerId) {
+          console.log(`Setting up events for active layer ${layer.id}`);
+          setupCanvasEvents(fabricCanvas, layer.id);
         }
-      } else if (e.key === "z" && (e.ctrlKey || e.metaKey)) {
-        // Undo with Ctrl+Z
-        e.preventDefault();
-        performUndo();
-      } else if (e.key === "y" && (e.ctrlKey || e.metaKey)) {
-        // Redo with Ctrl+Y
-        e.preventDefault();
-        performRedo();
+      }
+    });
+    
+    // Mettre à jour l'ordre d'empilement z-index
+    layers.forEach((layer, index) => {
+      const canvas = layerCanvasRefs.current.get(layer.id);
+      if (canvas) {
+        canvas.style.zIndex = `${index + 1}`;
+      }
+    });
+    
+    // Mettre la grille au-dessus de tout si visible
+    if (gridCanvasRef.current) {
+      gridCanvasRef.current.style.zIndex = `${layers.length + 1}`;
+      gridCanvasRef.current.style.display = gridVisible ? 'block' : 'none';
+    }
+  }, [layers, activeLayerId, width, height]);
+
+  // Configurer les événements spécifiques à l'outil actif sur le canvas du calque actif
+  useEffect(() => {
+    const activeFabricCanvas = fabricCanvasesRef.current.get(activeLayerId);
+    if (!activeFabricCanvas) {
+      console.log(`No canvas found for active layer ${activeLayerId}`);
+      return;
+    }
+    
+    // Mettre à jour le mode de sélection et les permissions
+    activeFabricCanvas.selection = activeTool === "select";
+    
+    // Mettre à jour les interactions pour tous les canvas
+    fabricCanvasesRef.current.forEach((canvas, layerId) => {
+      // Désactiver les interactions pour les calques non actifs
+      if (layerId !== activeLayerId) {
+        const canvasElement = layerCanvasRefs.current.get(layerId);
+        if (canvasElement) {
+          canvasElement.style.pointerEvents = 'none';
+        }
+        canvas.selection = false;
+        canvas.off('mouse:down');
+        canvas.off('mouse:move');
+        canvas.off('mouse:up');
+      } else {
+        const canvasElement = layerCanvasRefs.current.get(layerId);
+        if (canvasElement) {
+          canvasElement.style.pointerEvents = 'auto';
+        }
+      }
+    });
+    
+    // Configurer les événements pour le calque actif
+    setupCanvasEvents(activeFabricCanvas, activeLayerId);
+    
+    console.log(`Updated canvas events for active layer ${activeLayerId} with tool ${activeTool}`);
+  }, [activeTool, activeLayerId, strokeColor, strokeWidth, fillColor, snapToGrid]);
+
+  // Mettre à jour la visibilité des calques
+  useEffect(() => {
+    layers.forEach(layer => {
+      const canvasElement = layerCanvasRefs.current.get(layer.id);
+      if (canvasElement) {
+        canvasElement.style.display = layer.visible ? 'block' : 'none';
+      }
+    });
+    
+    // Mettre à jour la visibilité de la grille
+    if (gridCanvasRef.current) {
+      gridCanvasRef.current.style.display = gridVisible && !isPrintMode ? 'block' : 'none';
+    }
+  }, [layers, gridVisible, isPrintMode]);
+
+  // Mettre à jour les dimensions de tous les canvas lors du redimensionnement
+  useEffect(() => {
+    if (width === prevDimensionsRef.current.width && height === prevDimensionsRef.current.height) {
+      return;
+    }
+    
+    console.log(`Resizing all canvases to ${width}x${height}`);
+    
+    // Mettre à jour les dimensions de tous les canvas
+    fabricCanvasesRef.current.forEach((canvas, layerId) => {
+      canvas.setDimensions({ width, height });
+    });
+    
+    // Mettre à jour le canvas de grille
+    if (gridFabricCanvasRef.current) {
+      gridFabricCanvasRef.current.setDimensions({ width, height });
+      drawGrid();
+    }
+    
+    prevDimensionsRef.current = { width, height };
+  }, [width, height]);
+
+  // Configurer les événements clavier globaux
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      switch (e.key.toLowerCase()) {
+        case "delete":
+        case "backspace":
+          deleteSelectedObjects();
+          break;
+        case "z":
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            performUndo();
+          }
+          break;
+        case "y":
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            performRedo();
+          }
+          break;
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     
-    // Create the grid
-    drawGrid();
-
-    // Track object changes for undo/redo
-    canvas.on('object:added', function(e) {
-      if (!e.target || isHistoryActionRef.current) return;
-      
-      // Don't track grid points
-      if (gridRef.current && (gridRef.current.contains(e.target) || e.target === gridRef.current)) {
-        return;
-      }
-      
-      // Don't track temporary points
-      if (e.target === tempPointRef.current) {
-        return;
-      }
-      
-      // Add object only to the active layer
-      if (debugMode.current) {
-        console.log(`Object added to canvas, assigning to active layer: ${activeLayerId}`);
-      }
-      
-      // Get current active layer objects
-      let layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
-      
-      // Check if object isn't already in this layer
-      if (!layerObjects.includes(e.target)) {
-        layerObjects.push(e.target);
-        layerObjectsMap.current.set(activeLayerId, layerObjects);
-        
-        // Add custom property to the object to track its layer
-        e.target.set('layerId', activeLayerId);
-        
-        if (debugMode.current) {
-          console.log(`Added object to layer ${activeLayerId}, total objects in layer: ${layerObjects.length}`);
-        }
-        
-        // Update layers state
-        updateLayersWithObjects();
-        
-        saveHistoryState([e.target], 'add', activeLayerId);
-      }
-    });
-
-    canvas.on('object:modified', function(e) {
-      if (!e.target || isHistoryActionRef.current) return;
-      
-      // Don't track grid modifications
-      if (gridRef.current && (gridRef.current.contains(e.target) || e.target === gridRef.current)) {
-        return;
-      }
-      
-      saveHistoryState([e.target], 'modify', activeLayerId);
-    });
-
-    // Snap to grid when moving
-    canvas.on('object:moving', function(e) {
-      if (!snapToGrid || !e.target) return;
-      
-      const obj = e.target;
-      
-      // Snap to grid
-      const snapPoint = snapToGridPoint({
-        x: obj.left || 0,
-        y: obj.top || 0
-      });
-      
-      // Apply the snapped position
-      obj.set({
-        left: snapPoint.x,
-        top: snapPoint.y
-      });
-    });
-
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      canvas.dispose();
     };
-  }, [width, height, layers.length]);
+  }, [activeLayerId]);
 
-  // Handle canvas resize - Préserver les objets lorsque les dimensions changent
-  useEffect(() => {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
+  // Configurer les événements spécifiques pour un canvas
+  const setupCanvasEvents = (canvas: fabric.Canvas, layerId: string) => {
+    // Réinitialiser tous les événements
+    canvas.off('mouse:down');
+    canvas.off('mouse:move');
+    canvas.off('mouse:up');
     
-    // Si le canvas existe déjà, ajustez ses dimensions
-    if (width !== canvas.width || height !== canvas.height) {
-      // Sauvegardez l'ancien rapport de zoom
-      const oldWidth = prevDimensionsRef.current.width;
-      const oldHeight = prevDimensionsRef.current.height;
-      
-      // Mettez à jour les dimensions du canvas
-      canvas.setDimensions({ width, height });
-      
-      // Si ce n'est pas la première initialisation (vérifiez que oldWidth et oldHeight ont des valeurs valides)
-      if (oldWidth > 0 && oldHeight > 0) {
-        // Calcul des ratios de redimensionnement
-        const scaleX = width / oldWidth;
-        const scaleY = height / oldHeight;
-        
-        // Ajustez la vue pour éviter la disparition des objets
-        // Si les nouvelles dimensions sont plus petites, vous pourriez envisager de dézoomer
-        if (scaleX < 1 || scaleY < 1) {
-          // Décidez si un ajustement de zoom est nécessaire selon l'ampleur du changement
-          const minScale = Math.min(scaleX, scaleY);
-          if (minScale < 0.8) { // Ajustez uniquement si le changement est significatif
-            canvas.setZoom(canvas.getZoom() * minScale);
-          }
-        }
-      }
-      
-      // Mémoriser les nouvelles dimensions pour la prochaine comparaison
-      prevDimensionsRef.current = { width, height };
-      
-      // Redessinez la grille après le redimensionnement
-      drawGrid();
-      
-      // Assurez-vous que tous les objets sont toujours dans les limites
-      canvas.getObjects().forEach(obj => {
-        // Assurez-vous que l'objet n'est pas déplacé hors des limites visibles
-        const objBounds = obj.getBoundingRect();
-        if (objBounds && (objBounds.left > width || objBounds.top > height)) {
-          // Si l'objet est complètement hors des limites, ajustez sa position
-          if (objBounds.left > width) obj.set({ left: width - objBounds.width });
-          if (objBounds.top > height) obj.set({ top: height - objBounds.height });
-          obj.setCoords(); // Mise à jour des coordonnées
-        }
-      });
-      
-      // Demandez un rendu après le redimensionnement
-      canvas.requestRenderAll();
-    }
-  }, [width, height]);
-
-  // Helper function to update the layers state with current objects
-  const updateLayersWithObjects = () => {
-    if (isLayerUpdateInProgress.current) return;
-    
-    isLayerUpdateInProgress.current = true;
-    
-    setLayers(prevLayers => {
-      return prevLayers.map(layer => {
-        const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-        return {
-          ...layer,
-          objects: [...layerObjects]
-        };
-      });
-    });
-    
-    setTimeout(() => {
-      isLayerUpdateInProgress.current = false;
-    }, 0);
-  };
-
-  // Update canvas objects visibility based on layer settings
-  const updateLayersVisibility = () => {
-    if (!fabricCanvasRef.current) return;
-    const canvas = fabricCanvasRef.current;
-    
-    // Hide all objects first
-    canvas.getObjects().forEach(obj => {
-      // Skip grid
-      if (gridRef.current && (gridRef.current === obj || (gridRef.current.contains && gridRef.current.contains(obj)))) {
-        return;
-      }
-      
-      // Skip temp points
-      if (tempPointRef.current === obj) {
-        return;
-      }
-      
-      // Get the layer ID from the object
-      const objLayerId = obj.get('layerId');
-      
-      if (objLayerId) {
-        // Find the layer
-        const layer = layers.find(l => l.id === objLayerId);
-        
-        if (layer) {
-          // Set visibility based on layer visibility
-          obj.visible = layer.visible;
-          
-          // Set interactivity based on active layer and locked status
-          const isActive = objLayerId === activeLayerId;
-          obj.selectable = isActive && !layer.locked && activeTool === "select";
-          obj.evented = isActive && !layer.locked;
-          
-          if (debugMode.current) {
-            console.log(`Object visibility updated: layerId=${objLayerId}, visible=${obj.visible}, selectable=${obj.selectable}`);
-          }
-        }
-      }
-    });
-    
-    canvas.requestRenderAll();
-  };
-
-  // Effect to handle layer changes and visibility
-  useEffect(() => {
-    if (!fabricCanvasRef.current) return;
-    
-    console.log("Layer update effect triggered. Active layer:", activeLayerId);
-    
-    updateLayersVisibility();
-    
-  }, [layers, activeLayerId, activeTool]);
-
-  // Save the current state to history
-  const saveHistoryState = (objects: fabric.Object[], actionType: 'add' | 'remove' | 'modify', layerId: string) => {
-    // If we're in the middle of the history, truncate the future states
-    if (historyIndexRef.current < historyRef.current.length - 1) {
-      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
-    }
-    
-    // Add the new state
-    historyRef.current.push({
-      objects: [...objects],
-      type: actionType,
-      layerId
-    });
-    
-    // Update index
-    historyIndexRef.current = historyRef.current.length - 1;
-  };
-
-  // Perform undo action
-  const performUndo = () => {
-    if (!fabricCanvasRef.current || historyIndexRef.current < 0) {
-      toast("Rien à annuler");
-      return;
-    }
-    
-    const canvas = fabricCanvasRef.current;
-    const action = historyRef.current[historyIndexRef.current];
-    
-    isHistoryActionRef.current = true;
-    
-    try {
-      if (action.type === 'add') {
-        // Undo an addition by removing the objects
-        action.objects.forEach(obj => {
-          canvas.remove(obj);
-          
-          // Remove from layer
-          for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
-            const index = layerObjects.indexOf(obj);
-            if (index >= 0) {
-              layerObjects.splice(index, 1);
-              if (debugMode.current) {
-                console.log(`Removed object from layer ${layerId}`);
-              }
-              break;
-            }
-          }
-        });
-        
-        // CORRECTION: Mise à jour correcte après modifications
-        updateLayersWithObjects();
-        
-        toast("Action annulée");
-      } else if (action.type === 'remove') {
-        // Undo a removal by adding the objects back
-        action.objects.forEach(obj => {
-          canvas.add(obj);
-          
-          // Add back to layer
-          for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
-            const index = layerObjects.indexOf(obj);
-            if (index >= 0) {
-              layerObjects.push(obj);
-              layerObjectsMap.current.set(layerId, layerObjects);
-              if (debugMode.current) {
-                console.log(`Added object to layer ${layerId}`);
-              }
-              break;
-            }
-          }
-        });
-        
-        // CORRECTION: Mise à jour correcte après modifications
-        updateLayersWithObjects();
-        
-        toast("Suppression annulée");
-      } else if (action.type === 'modify') {
-        // For modify actions, we need to restore previous state
-        // This is simplified but could be enhanced with object state snapshots
-        toast("Modification annulée");
-      }
-      
-      // Decrement the history index
-      historyIndexRef.current--;
-      
-      canvas.requestRenderAll();
-    } finally {
-      isHistoryActionRef.current = false;
-    }
-  };
-
-  // Perform redo action
-  const performRedo = () => {
-    if (!fabricCanvasRef.current || historyIndexRef.current >= historyRef.current.length - 1) {
-      toast("Rien à rétablir");
-      return;
-    }
-    
-    // Increment the history index
-    historyIndexRef.current++;
-    
-    const canvas = fabricCanvasRef.current;
-    const action = historyRef.current[historyIndexRef.current];
-    
-    isHistoryActionRef.current = true;
-    
-    try {
-      if (action.type === 'add') {
-        // Redo an addition by adding the objects back
-        action.objects.forEach(obj => {
-          canvas.add(obj);
-          
-          // Add to layer if not already there
-          for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
-            const index = layerObjects.indexOf(obj);
-            if (index >= 0) {
-              layerObjects.push(obj);
-              layerObjectsMap.current.set(layerId, layerObjects);
-              if (debugMode.current) {
-                console.log(`Added object to layer ${layerId}`);
-              }
-              break;
-            }
-          }
-        });
-        
-        // CORRECTION: Mise à jour correcte après modifications
-        updateLayersWithObjects();
-        
-        toast("Action rétablie");
-      } else if (action.type === 'remove') {
-        // Redo a removal by removing the objects
-        action.objects.forEach(obj => {
-          const canvasObject = canvas.getObjects().find(o => o === obj);
-          if (canvasObject) {
-            canvas.remove(canvasObject);
-            
-            // Remove from layer
-            for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
-              const index = layerObjects.indexOf(obj);
-              if (index >= 0) {
-                layerObjects.splice(index, 1);
-                if (debugMode.current) {
-                  console.log(`Removed object from layer ${layerId}`);
-                }
-                break;
-              }
-            }
-          }
-        });
-        
-        // CORRECTION: Mise à jour correcte après modifications
-        updateLayersWithObjects();
-        
-        toast("Suppression rétablie");
-      } else if (action.type === 'modify') {
-        // For modify actions, we would need the next state
-        toast("Modification rétablie");
-      }
-      
-      canvas.requestRenderAll();
-    } finally {
-      isHistoryActionRef.current = false;
-    }
-  };
-
-  // Expose undo/redo functions explicitly to parent component
-  useEffect(() => {
-    // Direct function replacement - simpler approach
-    if (onUndo && typeof onUndo === 'function') {
-      // Define the original function to our implementation
-      const originalUndo = onUndo;
-      // Replace it with our implementation
-      onUndo = () => performUndo();
-    }
-    
-    if (onRedo && typeof onRedo === 'function') {
-      // Define the original function to our implementation
-      const originalRedo = onRedo;
-      // Replace it with our implementation
-      onRedo = () => performRedo();
-    }
-  }, []);
-
-  // Update selection mode based on activeTool
-  useEffect(() => {
-    if (!fabricCanvasRef.current) return;
-    
-    const canvas = fabricCanvasRef.current;
-    
-    // Set selection mode
-    canvas.selection = activeTool === "select";
-    
-    // Set appropriate cursor
+    // Définir le curseur approprié
     switch (activeTool) {
       case "select":
         canvas.defaultCursor = "default";
@@ -574,146 +354,86 @@ export const Canvas: React.FC<CanvasProps> = ({
       default:
         canvas.defaultCursor = "default";
     }
-
-    // Reset interactions
-    canvas.off("mouse:down");
-    canvas.off("mouse:move");
-    canvas.off("mouse:up");
-
-    // Make all objects non-interactive when using drawing tools
-    updateObjectsInteractivity(canvas, activeTool);
-
-    // Set up tool-specific interactions
+    
+    // Configurer les interactions selon l'outil actif
     if (activeTool === "line") {
-      setupLineTool(canvas);
+      setupLineTool(canvas, layerId);
     } else if (activeTool === "circle") {
-      setupCircleTool(canvas);
+      setupCircleTool(canvas, layerId);
     } else if (activeTool === "rectangle") {
-      setupRectangleTool(canvas);
+      setupRectangleTool(canvas, layerId);
     } else if (activeTool === "text") {
-      setupTextTool(canvas);
+      setupTextTool(canvas, layerId);
     } else if (activeTool === "erase") {
-      setupEraseTool(canvas);
+      setupEraseTool(canvas, layerId);
     } else if (activeTool === "arrow") {
-      setupArrowTool(canvas);
-    }
-
-    canvas.requestRenderAll();
-  }, [activeTool, activeLayerId]);
-
-  // Effect to react to changes in strokeWidth, strokeColor and fillColor
-  useEffect(() => {
-    // Cette fonction sera appelée à chaque changement des propriétés
-    if (!fabricCanvasRef.current) return;
-    
-    // Réinitialiser les outils pour appliquer les nouvelles propriétés
-    const canvas = fabricCanvasRef.current;
-    
-    // Mettre à jour tous les objets sélectionnés avec les nouvelles propriétés
-    const activeObjects = canvas.getActiveObjects();
-    if (activeObjects.length > 0) {
-      activeObjects.forEach(obj => {
-        if (obj.stroke !== undefined) {
-          obj.set({
-            stroke: strokeColor,
-            strokeWidth: strokeWidth
-          });
-        }
-        if (obj.fill !== undefined && obj !== gridRef.current) {
-          obj.set({ fill: fillColor });
-        }
-      });
-      canvas.requestRenderAll();
-    }
-    
-    // Réinitialiser les outils actuels pour qu'ils utilisent les nouvelles propriétés
-    canvas.off("mouse:down");
-    canvas.off("mouse:move");
-    canvas.off("mouse:up");
-    
-    // Remettre en place les interactions selon l'outil actif
-    if (activeTool === "line") {
-      setupLineTool(canvas);
-    } else if (activeTool === "circle") {
-      setupCircleTool(canvas);
-    } else if (activeTool === "rectangle") {
-      setupRectangleTool(canvas);
-    }
-  }, [strokeWidth, strokeColor, fillColor]);
-
-  // Update objects interactivity based on current tool
-  const updateObjectsInteractivity = (canvas: fabric.Canvas, tool: Tool) => {
-    // Make all objects interactive or not based on the current tool and layer status
-    const isDrawingTool = tool !== "select" && tool !== "erase";
-    
-    canvas.getObjects().forEach((obj) => {
-      // Skip grid points and make sure the grid is never selectable
-      if (gridRef.current && (gridRef.current.contains(obj) || obj === gridRef.current)) {
-        obj.selectable = false;
-        obj.evented = false;
-        obj.lockMovementX = true;
-        obj.lockMovementY = true;
-        return;
-      }
-      
-      // Get the layer this object belongs to
-      const objLayerId = obj.get('layerId');
-      
-      if (objLayerId) {
-        const layer = layers.find(l => l.id === objLayerId);
+      setupArrowTool(canvas, layerId);
+    } else if (activeTool === "select") {
+      // Événements supplémentaires pour le mode sélection
+      canvas.on('object:added', function(e) {
+        if (!e.target || isHistoryActionRef.current) return;
         
-        // Apply layer visibility and interactivity
-        if (layer) {
-          obj.visible = layer.visible;
+        // Ajouter l'ID du calque à l'objet
+        e.target.set('layerId', layerId);
+        
+        console.log(`Object added to layer ${layerId}`);
+        saveHistoryState([e.target], 'add', layerId);
+        
+        // Mettre à jour la liste d'objets du calque
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
+      });
+      
+      canvas.on('object:modified', function(e) {
+        if (!e.target || isHistoryActionRef.current) return;
+        
+        console.log(`Object modified in layer ${layerId}`);
+        saveHistoryState([e.target], 'modify', layerId);
+        
+        // Mettre à jour la liste d'objets du calque
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
+      });
+      
+      // Appliquer le snap to grid en mode select
+      if (snapToGrid) {
+        canvas.on('object:moving', function(e) {
+          if (!e.target) return;
           
-          // Apply layer lock and interactivity
-          const isActive = objLayerId === activeLayerId;
-          obj.selectable = isActive && !layer.locked && !isDrawingTool;
-          obj.evented = isActive && !layer.locked;
+          const obj = e.target;
           
-          if (debugMode.current) {
-            console.log(`Object interactivity updated: layerId=${objLayerId}, visible=${obj.visible}, selectable=${obj.selectable}`);
-          }
-        }
-      } else {
-        // Default behavior for objects not assigned to layers
-        obj.selectable = !isDrawingTool;
-        obj.evented = true;
+          // Appliquer le snap
+          const snapPoint = snapToGridPoint({
+            x: obj.left || 0,
+            y: obj.top || 0
+          });
+          
+          obj.set({
+            left: snapPoint.x,
+            top: snapPoint.y
+          });
+        });
       }
-    });
+    }
   };
 
-  // Update grid when grid properties change
-  useEffect(() => {
-    drawGrid();
-  }, [gridSize, gridVisible]);
-
-  // Update print mode
-  useEffect(() => {
-    if (!fabricCanvasRef.current || !gridRef.current) return;
-    
-    // Hide grid in print mode
-    gridRef.current.visible = gridVisible && !isPrintMode;
-    fabricCanvasRef.current.requestRenderAll();
-  }, [isPrintMode, gridVisible]);
-
-  // Draw the grid of points with correct dimensions
+  // Dessiner la grille sur son propre canvas
   const drawGrid = () => {
-    if (!fabricCanvasRef.current) return;
+    if (!gridFabricCanvasRef.current) return;
     
-    const canvas = fabricCanvasRef.current;
+    const canvas = gridFabricCanvasRef.current;
     
-    // Remove previous grid if it exists
+    // Supprimer la grille précédente
     if (gridRef.current) {
       canvas.remove(gridRef.current);
     }
 
     const points = [];
     const cellSize = gridSize;
-    const cols = Math.floor(canvas.width / cellSize) + 1;
-    const rows = Math.floor(canvas.height / cellSize) + 1;
+    const cols = Math.floor(width / cellSize) + 1;
+    const rows = Math.floor(height / cellSize) + 1;
 
-    // Create grid points
+    // Créer les points de la grille
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         const x = col * cellSize;
@@ -735,7 +455,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
     }
 
-    // Group all points
+    // Regrouper tous les points
     const grid = new fabric.Group(points, {
       selectable: false,
       evented: false,
@@ -746,13 +466,10 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     canvas.add(grid);
     gridRef.current = grid;
-    
-    // Move grid to the back
-    grid.sendToBack();
     canvas.requestRenderAll();
   };
 
-  // Snap point to nearest grid point
+  // Snap to grid
   const snapToGridPoint = (point: Point): Point => {
     if (!snapToGrid) return point;
     
@@ -763,13 +480,175 @@ export const Canvas: React.FC<CanvasProps> = ({
     };
   };
 
-  // Line tool setup
-  const setupLineTool = (canvas: fabric.Canvas) => {
+  // Supprimer les objets sélectionnés du calque actif
+  const deleteSelectedObjects = () => {
+    const canvas = fabricCanvasesRef.current.get(activeLayerId);
+    if (!canvas) return;
+    
+    const activeObjects = canvas.getActiveObjects();
+    if (activeObjects.length === 0) return;
+    
+    // Vérifier si le calque est verrouillé
+    const activeLayer = layers.find(layer => layer.id === activeLayerId);
+    if (activeLayer?.locked) {
+      toast.error("Le calque est verrouillé");
+      return;
+    }
+    
+    // Sauvegarder l'état avant suppression
+    saveHistoryState(activeObjects, 'remove', activeLayerId);
+    
+    // Supprimer les objets
+    canvas.discardActiveObject();
+    activeObjects.forEach(obj => {
+      canvas.remove(obj);
+    });
+    
+    // Mettre à jour la liste d'objets du calque
+    const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+    updateLayerObjects(activeLayerId, layerObjects);
+    
+    canvas.requestRenderAll();
+    toast("Objets supprimés");
+  };
+  
+  // Historique: sauvegarder l'état
+  const saveHistoryState = (objects: fabric.Object[], actionType: 'add' | 'remove' | 'modify', layerId: string) => {
+    // Si nous sommes au milieu de l'historique, tronquer les états futurs
+    if (historyIndexRef.current < historyRef.current.length - 1) {
+      historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
+    }
+    
+    // Ajouter le nouvel état
+    historyRef.current.push({
+      objects: [...objects],
+      type: actionType,
+      layerId
+    });
+    
+    // Mettre à jour l'index
+    historyIndexRef.current = historyRef.current.length - 1;
+  };
+
+  // Undo
+  const performUndo = () => {
+    if (historyIndexRef.current < 0) {
+      toast("Rien à annuler");
+      return;
+    }
+    
+    const action = historyRef.current[historyIndexRef.current];
+    const canvas = fabricCanvasesRef.current.get(action.layerId);
+    
+    if (!canvas) {
+      console.error(`Canvas not found for layer ${action.layerId}`);
+      historyIndexRef.current--;
+      return;
+    }
+    
+    isHistoryActionRef.current = true;
+    
+    try {
+      if (action.type === 'add') {
+        // Annuler un ajout en supprimant les objets
+        action.objects.forEach(obj => {
+          canvas.remove(obj);
+        });
+        
+        toast("Action annulée");
+      } else if (action.type === 'remove') {
+        // Annuler une suppression en ajoutant les objets
+        action.objects.forEach(obj => {
+          canvas.add(obj);
+        });
+        
+        toast("Suppression annulée");
+      } else if (action.type === 'modify') {
+        // Pour les modifications, il faudrait stocker l'état précédent des objets
+        toast("Modification annulée");
+      }
+      
+      // Décrémenter l'index d'historique
+      historyIndexRef.current--;
+      
+      // Mettre à jour la liste d'objets du calque
+      const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+      updateLayerObjects(action.layerId, layerObjects);
+      
+      canvas.requestRenderAll();
+    } finally {
+      isHistoryActionRef.current = false;
+    }
+  };
+
+  // Redo
+  const performRedo = () => {
+    if (historyIndexRef.current >= historyRef.current.length - 1) {
+      toast("Rien à rétablir");
+      return;
+    }
+    
+    // Incrémenter l'index d'historique
+    historyIndexRef.current++;
+    
+    const action = historyRef.current[historyIndexRef.current];
+    const canvas = fabricCanvasesRef.current.get(action.layerId);
+    
+    if (!canvas) {
+      console.error(`Canvas not found for layer ${action.layerId}`);
+      return;
+    }
+    
+    isHistoryActionRef.current = true;
+    
+    try {
+      if (action.type === 'add') {
+        // Rétablir un ajout en ajoutant les objets
+        action.objects.forEach(obj => {
+          canvas.add(obj);
+        });
+        
+        toast("Action rétablie");
+      } else if (action.type === 'remove') {
+        // Rétablir une suppression en supprimant les objets
+        action.objects.forEach(obj => {
+          canvas.remove(obj);
+        });
+        
+        toast("Suppression rétablie");
+      } else if (action.type === 'modify') {
+        // Pour les modifications, il faudrait restaurer l'état suivant
+        toast("Modification rétablie");
+      }
+      
+      // Mettre à jour la liste d'objets du calque
+      const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+      updateLayerObjects(action.layerId, layerObjects);
+      
+      canvas.requestRenderAll();
+    } finally {
+      isHistoryActionRef.current = false;
+    }
+  };
+
+  // Exposer les fonctions d'annulation/rétablissement au composant parent
+  useEffect(() => {
+    if (onUndo && typeof onUndo === 'function') {
+      onUndo = () => performUndo();
+    }
+    
+    if (onRedo && typeof onRedo === 'function') {
+      onRedo = () => performRedo();
+    }
+  }, []);
+
+  // Outil Ligne
+  const setupLineTool = (canvas: fabric.Canvas, layerId: string) => {
     let line: fabric.Line | null = null;
     
     canvas.on("mouse:down", (o) => {
-      // Check if current layer is locked
-      const currentLayer = layers.find(l => l.id === activeLayerId);
+      // Vérifier si le calque est verrouillé
+      const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
         toast.error("Calque actif non trouvé");
         return;
@@ -788,7 +667,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       
       startPointRef.current = snappedPoint;
       
-      // Show temporary point
+      // Afficher un point temporaire
       if (tempPointRef.current) {
         canvas.remove(tempPointRef.current);
       }
@@ -805,7 +684,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       
       canvas.add(tempPointRef.current);
       
-      // Create the line
+      // Créer la ligne
       line = new fabric.Line(
         [snappedPoint.x, snappedPoint.y, snappedPoint.x, snappedPoint.y],
         {
@@ -817,6 +696,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       );
       
       canvas.add(line);
+      
+      // Mettre à jour l'objet en cours de dessin
+      setCurrentDrawingObjects({
+        layerId,
+        object: line
+      });
     });
     
     canvas.on("mouse:move", (o) => {
@@ -839,56 +724,43 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on("mouse:up", () => {
       if (!line || !startPointRef.current) return;
       
-      // Remove temporary point
+      // Supprimer le point temporaire
       if (tempPointRef.current) {
         canvas.remove(tempPointRef.current);
         tempPointRef.current = null;
       }
       
-      // Remove zero-length lines
-      if (
-        line.x1 === line.x2 &&
-        line.y1 === line.y2
-      ) {
+      // Supprimer les lignes de longueur nulle
+      if (line.x1 === line.x2 && line.y1 === line.y2) {
         canvas.remove(line);
         toast("Ligne annulée - longueur nulle");
       } else {
-        // Now make the line selectable for future interactions
+        // Rendre la ligne interactive
         line.set({
           selectable: true,
           evented: true,
-          layerId: activeLayerId // Set layer ID directly on the object
+          layerId: layerId
         });
-
-        // Add object to layer map
-        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
-        if (!layerObjects.includes(line)) {
-          layerObjects.push(line);
-          layerObjectsMap.current.set(activeLayerId, layerObjects);
-          
-          if (debugMode.current) {
-            console.log(`Added line to layer ${activeLayerId}, total: ${layerObjects.length}`);
-          }
-          
-          // Update layers state with new objects
-          updateLayersWithObjects();
-        }
+        
+        // Mettre à jour la liste d'objets du calque
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
       }
       
       startPointRef.current = null;
-      line = null;
+      setCurrentDrawingObjects({ layerId: '', object: null });
       
       canvas.requestRenderAll();
     });
   };
 
-  // Circle tool setup
-  const setupCircleTool = (canvas: fabric.Canvas) => {
+  // Outil Cercle
+  const setupCircleTool = (canvas: fabric.Canvas, layerId: string) => {
     let circle: fabric.Circle | null = null;
     
     canvas.on("mouse:down", (o) => {
-      // Check if current layer is locked
-      const currentLayer = layers.find(l => l.id === activeLayerId);
+      // Vérifier si le calque est verrouillé
+      const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
         toast.error("Calque actif non trouvé");
         return;
@@ -907,7 +779,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       
       startPointRef.current = snappedPoint;
       
-      // Show temporary point
+      // Afficher un point temporaire
       if (tempPointRef.current) {
         canvas.remove(tempPointRef.current);
       }
@@ -924,7 +796,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       
       canvas.add(tempPointRef.current);
       
-      // Create the circle
+      // Créer le cercle
       circle = new fabric.Circle({
         left: snappedPoint.x,
         top: snappedPoint.y,
@@ -940,6 +812,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       });
       
       canvas.add(circle);
+      
+      // Mettre à jour l'objet en cours de dessin
+      setCurrentDrawingObjects({
+        layerId,
+        object: circle
+      });
     });
     
     canvas.on("mouse:move", (o) => {
@@ -964,54 +842,43 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on("mouse:up", () => {
       if (!circle || !startPointRef.current) return;
       
-      // Remove temporary point
+      // Supprimer le point temporaire
       if (tempPointRef.current) {
         canvas.remove(tempPointRef.current);
         tempPointRef.current = null;
       }
       
-      // Remove zero-radius circles
+      // Supprimer les cercles de rayon nul
       if (circle.radius === 0) {
         canvas.remove(circle);
         toast("Cercle annulé - rayon nul");
       } else {
-        // Now make the circle selectable for future interactions
+        // Rendre le cercle interactif
         circle.set({
           selectable: true,
           evented: true,
-          layerId: activeLayerId // Set layer ID directly
+          layerId: layerId
         });
         
-        // Add the object to the active layer
-        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
-        
-        if (!layerObjects.includes(circle)) {
-          layerObjects.push(circle);
-          layerObjectsMap.current.set(activeLayerId, layerObjects);
-          
-          if (debugMode.current) {
-            console.log(`Added circle to layer ${activeLayerId}, total: ${layerObjects.length}`);
-          }
-          
-          // Update layers state with new objects
-          updateLayersWithObjects();
-        }
+        // Mettre à jour la liste d'objets du calque
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
       }
       
       startPointRef.current = null;
-      circle = null;
+      setCurrentDrawingObjects({ layerId: '', object: null });
       
       canvas.requestRenderAll();
     });
   };
 
-  // Rectangle tool setup
-  const setupRectangleTool = (canvas: fabric.Canvas) => {
+  // Outil Rectangle
+  const setupRectangleTool = (canvas: fabric.Canvas, layerId: string) => {
     let rect: fabric.Rect | null = null;
     
     canvas.on("mouse:down", (o) => {
-      // Check if current layer is locked
-      const currentLayer = layers.find(l => l.id === activeLayerId);
+      // Vérifier si le calque est verrouillé
+      const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
         toast.error("Calque actif non trouvé");
         return;
@@ -1030,7 +897,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       
       startPointRef.current = snappedPoint;
       
-      // Show temporary point
+      // Afficher un point temporaire
       if (tempPointRef.current) {
         canvas.remove(tempPointRef.current);
       }
@@ -1047,7 +914,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       
       canvas.add(tempPointRef.current);
       
-      // Create the rectangle
+      // Créer le rectangle
       rect = new fabric.Rect({
         left: snappedPoint.x,
         top: snappedPoint.y,
@@ -1062,6 +929,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       });
       
       canvas.add(rect);
+      
+      // Mettre à jour l'objet en cours de dessin
+      setCurrentDrawingObjects({
+        layerId,
+        object: rect
+      });
     });
     
     canvas.on("mouse:move", (o) => {
@@ -1086,52 +959,41 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on("mouse:up", () => {
       if (!rect || !startPointRef.current) return;
       
-      // Remove temporary point
+      // Supprimer le point temporaire
       if (tempPointRef.current) {
         canvas.remove(tempPointRef.current);
         tempPointRef.current = null;
       }
       
-      // Remove zero-size rectangles
+      // Supprimer les rectangles de taille nulle
       if (rect.width === 0 && rect.height === 0) {
         canvas.remove(rect);
         toast("Rectangle annulé - taille nulle");
       } else {
-        // Now make the rectangle selectable for future interactions
+        // Rendre le rectangle interactif
         rect.set({
           selectable: true,
           evented: true,
-          layerId: activeLayerId // Set layer ID directly
+          layerId: layerId
         });
         
-        // Add the object to the active layer
-        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
-        
-        if (!layerObjects.includes(rect)) {
-          layerObjects.push(rect);
-          layerObjectsMap.current.set(activeLayerId, layerObjects);
-          
-          if (debugMode.current) {
-            console.log(`Added rectangle to layer ${activeLayerId}, total: ${layerObjects.length}`);
-          }
-          
-          // Update layers state with new objects
-          updateLayersWithObjects();
-        }
+        // Mettre à jour la liste d'objets du calque
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
       }
       
       startPointRef.current = null;
-      rect = null;
+      setCurrentDrawingObjects({ layerId: '', object: null });
       
       canvas.requestRenderAll();
     });
   };
 
-  // Text tool setup
-  const setupTextTool = (canvas: fabric.Canvas) => {
+  // Outil Texte
+  const setupTextTool = (canvas: fabric.Canvas, layerId: string) => {
     canvas.on("mouse:down", (o) => {
-      // Check if current layer is locked
-      const currentLayer = layers.find(l => l.id === activeLayerId);
+      // Vérifier si le calque est verrouillé
+      const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
         toast.error("Calque actif non trouvé");
         return;
@@ -1155,7 +1017,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         fill: strokeColor,
         selectable: true,
         editable: true,
-        layerId: activeLayerId // Set layer ID directly
+        layerId: layerId
       });
       
       canvas.add(text);
@@ -1163,113 +1025,81 @@ export const Canvas: React.FC<CanvasProps> = ({
       text.enterEditing();
       text.selectAll();
       
-      // Add to layer
-      const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
-      if (!layerObjects.includes(text)) {
-        layerObjects.push(text);
-        layerObjectsMap.current.set(activeLayerId, layerObjects);
-        
-        if (debugMode.current) {
-          console.log(`Added text to layer ${activeLayerId}, total: ${layerObjects.length}`);
-        }
-        
-        // Update layers state
-        updateLayersWithObjects();
-      }
+      // Mettre à jour la liste d'objets du calque
+      const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+      updateLayerObjects(layerId, layerObjects);
       
       canvas.requestRenderAll();
     });
   };
 
-  // Erase tool setup
-  const setupEraseTool = (canvas: fabric.Canvas) => {
+  // Outil Gomme
+  const setupEraseTool = (canvas: fabric.Canvas, layerId: string) => {
     canvas.on("mouse:down", (o) => {
-      const pointer = canvas.getPointer(o.e);
+      // Vérifier si le calque est verrouillé
+      const currentLayer = layers.find(l => l.id === layerId);
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
       
-      // Find object under pointer - check all objects in the canvas
+      if (currentLayer.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
+      const pointer = canvas.getPointer(o.e);
       const objects = canvas.getObjects();
       let objectToRemove = null;
       
-      // Get the topmost object that contains the point
+      // Trouver l'objet sous le pointeur
       for (let i = objects.length - 1; i >= 0; i--) {
         const obj = objects[i];
         
-        // Skip grid
-        if (gridRef.current && (gridRef.current === obj || (gridRef.current.contains && gridRef.current.contains(obj)))) {
-          continue;
-        }
+        // Ignorer le point temporaire
+        if (obj === tempPointRef.current) continue;
         
-        // Skip temporary point
-        if (tempPointRef.current === obj) {
-          continue;
-        }
-        
-        // Check if object contains the clicked point or if it's close to a line or shape
+        // Vérifier si l'objet contient le point ou est proche
         if (isPointInOrNearObject(obj, pointer)) {
-          // Get the layer ID of this object
-          const objLayerId = obj.get('layerId');
-          
-          // Check if object belongs to a locked layer
-          if (objLayerId) {
-            const layer = layers.find(l => l.id === objLayerId);
-            if (layer && layer.locked) {
-              toast.error("Cet objet est sur un calque verrouillé");
-              continue;
-            }
-          }
-          
           objectToRemove = obj;
           break;
         }
       }
       
       if (objectToRemove) {
-        // Get the layer ID of the object
-        const objLayerId = objectToRemove.get('layerId');
+        // Sauvegarder l'état avant suppression
+        saveHistoryState([objectToRemove], 'remove', layerId);
         
-        if (objLayerId) {
-          // Get the layer objects
-          const layerObjects = layerObjectsMap.current.get(objLayerId) || [];
-          const index = layerObjects.indexOf(objectToRemove);
-          
-          if (index >= 0) {
-            // Save state before removing
-            saveHistoryState([objectToRemove], 'remove', objLayerId);
-            
-            // Remove from canvas
-            canvas.remove(objectToRemove);
-            
-            // Remove from layer objects map
-            layerObjects.splice(index, 1);
-            
-            // Update layers state
-            updateLayersWithObjects();
-            
-            canvas.requestRenderAll();
-            toast("Objet supprimé");
-          }
-        }
+        // Supprimer l'objet
+        canvas.remove(objectToRemove);
+        
+        // Mettre à jour la liste d'objets du calque
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
+        
+        canvas.requestRenderAll();
+        toast("Objet supprimé");
       }
     });
   };
 
-  // Helper function to check if a point is in or near an object
+  // Détection de proximité d'un objet
   const isPointInOrNearObject = (obj: fabric.Object, point: { x: number, y: number }): boolean => {
-    // Standard containment check
+    // Vérification standard
     if (obj.containsPoint(point)) {
       return true;
     }
     
-    // Special handling for lines - check proximity
+    // Traitement spécial pour les lignes
     if (obj instanceof fabric.Line) {
-      const threshold = 10; // Pixel distance for considering "near" a line
+      const threshold = 10; // Distance en pixels
       
       const x1 = obj.x1 || 0;
       const y1 = obj.y1 || 0;
       const x2 = obj.x2 || 0;
       const y2 = obj.y2 || 0;
       
-      // Calculate the distance from point to line segment
+      // Calculer la distance du point à la ligne
       const A = point.x - x1;
       const B = point.y - y1;
       const C = x2 - x1;
@@ -1304,10 +1134,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       return distance < threshold;
     }
     
-    // For other shapes (rectangles, circles), try bounding box with padding
+    // Pour les autres formes
     const boundingRect = obj.getBoundingRect();
     if (boundingRect) {
-      const padding = 5; // Extra padding around the shape
+      const padding = 5;
       return point.x >= boundingRect.left - padding && 
              point.x <= boundingRect.left + boundingRect.width + padding &&
              point.y >= boundingRect.top - padding && 
@@ -1316,14 +1146,14 @@ export const Canvas: React.FC<CanvasProps> = ({
     
     return false;
   };
-  
-  // Arrow tool setup
-  const setupArrowTool = (canvas: fabric.Canvas) => {
+
+  // Outil Flèche
+  const setupArrowTool = (canvas: fabric.Canvas, layerId: string) => {
     let arrowLine: fabric.Line | null = null;
     
     canvas.on("mouse:down", (o) => {
-      // Check if current layer is locked
-      const currentLayer = layers.find(l => l.id === activeLayerId);
+      // Vérifier si le calque est verrouillé
+      const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
         toast.error("Calque actif non trouvé");
         return;
@@ -1342,7 +1172,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       
       startPointRef.current = snappedPoint;
       
-      // Show temporary point
+      // Afficher un point temporaire
       if (tempPointRef.current) {
         canvas.remove(tempPointRef.current);
       }
@@ -1359,7 +1189,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       
       canvas.add(tempPointRef.current);
       
-      // Create the initial arrow line
+      // Créer la ligne de la flèche
       arrowLine = new fabric.Line(
         [snappedPoint.x, snappedPoint.y, snappedPoint.x, snappedPoint.y],
         {
@@ -1371,6 +1201,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       );
       
       canvas.add(arrowLine);
+      
+      // Mettre à jour l'objet en cours de dessin
+      setCurrentDrawingObjects({
+        layerId,
+        object: arrowLine
+      });
     });
     
     canvas.on("mouse:move", (o) => {
@@ -1393,13 +1229,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on("mouse:up", () => {
       if (!arrowLine || !startPointRef.current) return;
       
-      // Remove temporary point
+      // Supprimer le point temporaire
       if (tempPointRef.current) {
         canvas.remove(tempPointRef.current);
         tempPointRef.current = null;
       }
       
-      // Remove zero-length arrows
+      // Supprimer les flèches de longueur nulle
       if (
         arrowLine.x1 === arrowLine.x2 &&
         arrowLine.y1 === arrowLine.y2
@@ -1407,13 +1243,13 @@ export const Canvas: React.FC<CanvasProps> = ({
         canvas.remove(arrowLine);
         toast("Flèche annulée - longueur nulle");
       } else {
-        // Calculate the angle for the arrowhead
+        // Calculer l'angle pour la pointe de la flèche
         const deltaX = (arrowLine.x2 || 0) - (arrowLine.x1 || 0);
         const deltaY = (arrowLine.y2 || 0) - (arrowLine.y1 || 0);
         const angle = Math.atan2(deltaY, deltaX);
         
-        // Create arrowhead
-        const arrowHeadSize = Math.max(8, strokeWidth * 2); // Scale with stroke width
+        // Créer la pointe de la flèche
+        const arrowHeadSize = Math.max(8, strokeWidth * 2);
         
         const arrowHead = new fabric.Triangle({
           left: arrowLine.x2,
@@ -1432,38 +1268,52 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         canvas.add(arrowHead);
         
-        // Group the line and arrowhead
+        // Grouper la ligne et la pointe
         const arrowGroup = new fabric.Group([arrowLine, arrowHead], {
           selectable: true,
           evented: true,
-          layerId: activeLayerId // Set layer ID directly
+          layerId: layerId
         });
         
-        // Remove the individual objects and add the group
+        // Supprimer les objets individuels et ajouter le groupe
         canvas.remove(arrowLine, arrowHead);
         canvas.add(arrowGroup);
         
-        // Add to layer - the object:added event will handle this
-        if (debugMode.current) {
-          console.log(`Arrow created on active layer: ${activeLayerId}`);
-        }
+        // Mettre à jour la liste d'objets du calque
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
         
         toast("Flèche ajoutée");
       }
       
       startPointRef.current = null;
-      arrowLine = null;
+      setCurrentDrawingObjects({ layerId: '', object: null });
       
       canvas.requestRenderAll();
     });
   };
 
   return (
-    <div className="canvas-container relative">
+    <div className="canvas-container relative" ref={canvasContainerRef}>
+      {/* Canvas pour la grille (toujours en arrière-plan) */}
       <canvas 
-        ref={canvasRef}
-        className={`${isPrintMode ? "print-view" : ""} border border-gray-200 shadow-sm block`}
+        ref={gridCanvasRef}
+        className="border border-gray-200 absolute top-0 left-0"
+        style={{ 
+          display: gridVisible && !isPrintMode ? 'block' : 'none',
+          pointerEvents: 'none'
+        }}
+        width={width}
+        height={height}
       />
+      
+      {/* Les canvas des calques seront ajoutés dynamiquement ici par useEffect */}
+      
+      {/* Container principal avec la classe de mode impression */}
+      <div 
+        className={`relative ${isPrintMode ? "print-view" : ""} border border-gray-200 shadow-sm block`}
+        style={{ width, height }}
+      ></div>
     </div>
   );
 };
