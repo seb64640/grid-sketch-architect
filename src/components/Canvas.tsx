@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -156,6 +155,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         const canvasElement = layerCanvasRefs.current.get(layer.id);
         if (canvasElement) {
           canvasElement.style.display = layer.visible ? 'block' : 'none';
+          // Important: Don't disable pointer events on active layer that isn't locked
           canvasElement.style.pointerEvents = layer.id === activeLayerId && !layer.locked ? 'auto' : 'none';
           canvasElement.style.zIndex = `${index + 1}`;
         }
@@ -273,9 +273,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     activeFabricCanvas.selection = activeTool === "select" && !activeLayer.locked;
     
     // Configurer les événements pour le calque actif
-    setupCanvasEvents(activeFabricCanvas, activeLayerId);
-    
-    console.log(`Updated canvas events for active layer ${activeLayerId} with tool ${activeTool}. Layer locked: ${activeLayer.locked}`);
+    if (!activeLayer.locked) {
+      setupCanvasEvents(activeFabricCanvas, activeLayerId);
+      console.log(`Updated canvas events for active layer ${activeLayerId} with tool ${activeTool}. Layer locked: ${activeLayer.locked}`);
+    } else {
+      console.log(`Layer ${activeLayerId} is locked, no events set up`);
+    }
   }, [activeTool, activeLayerId, strokeColor, strokeWidth, fillColor, snapToGrid, layers]);
 
   // Mettre à jour la visibilité des calques
@@ -1136,7 +1139,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         updateLayerObjects(layerId, layerObjects);
         
         canvas.requestRenderAll();
-        toast("Objet supprimé");
+        toast("Objet supprim��");
       }
     });
   };
