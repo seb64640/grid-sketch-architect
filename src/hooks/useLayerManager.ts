@@ -47,7 +47,7 @@ export const useLayerManager = () => {
     const newLayerId = `layer-${Date.now()}`; // Using timestamp to ensure unique IDs
     const newLayerName = generateUniqueLayerName();
     
-    // Create a new layer without changing visibility of existing layers
+    // Create a new layer
     const newLayer: Layer = {
       id: newLayerId,
       name: newLayerName,
@@ -56,16 +56,11 @@ export const useLayerManager = () => {
       objects: [] // Initialize with empty objects array
     };
     
-    // CRITICAL: Simple approach - add the new layer without modifying existing layers at all
-    setLayers(prevLayers => [...prevLayers]);
+    // Add the layer directly without any setTimeout or complex logic
+    setLayers(prevLayers => [...prevLayers, newLayer]);
+    setActiveLayerId(newLayerId);
     
-    // Small delay to ensure state update completes before adding the new layer
-    setTimeout(() => {
-      setLayers(prevLayers => [...prevLayers, newLayer]);
-      setActiveLayerId(newLayerId);
-      console.log("New layer added:", newLayerId);
-    }, 50);
-    
+    console.log("New layer added:", newLayerId);
     toast(`Nouveau calque: ${newLayerName}`);
   }, [generateUniqueLayerName]);
 
@@ -108,7 +103,7 @@ export const useLayerManager = () => {
     }));
     
     const targetLayer = layers.find(layer => layer.id === layerId);
-    toast(`Calque ${targetLayer?.name} ${targetLayer?.visible ? "masqué" : "visible"}`);
+    toast(`Calque ${targetLayer?.name} ${!targetLayer?.visible ? "visible" : "masqué"}`);
   }, [layers]);
 
   const toggleLayerLock = useCallback((layerId: string) => {
@@ -125,7 +120,7 @@ export const useLayerManager = () => {
     }));
     
     const targetLayer = layers.find(layer => layer.id === layerId);
-    toast(`Calque ${targetLayer?.name} ${targetLayer?.locked ? "déverrouillé" : "verrouillé"}`);
+    toast(`Calque ${targetLayer?.name} ${!targetLayer?.locked ? "verrouillé" : "déverrouillé"}`);
   }, [layers]);
 
   // Start editing a layer name
@@ -183,10 +178,11 @@ export const useLayerManager = () => {
       id: l.id,
       name: l.name,
       objectCount: l.objects?.length || 0,
+      visible: l.visible
     }))));
   }, [activeLayerId, layers]);
 
-  // New function to update layer objects without losing references
+  // Update layer objects without losing references
   const updateLayerObjects = useCallback((layerId: string, objects: any[]) => {
     setLayers(prevLayers => prevLayers.map(layer => {
       if (layer.id === layerId) {
@@ -214,6 +210,6 @@ export const useLayerManager = () => {
     startEditLayerName,
     saveLayerName,
     setEditLayerName,
-    updateLayerObjects // Export the new function
+    updateLayerObjects
   };
 };

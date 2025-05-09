@@ -41,13 +41,16 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
     addLayer();
   };
 
+  // Get the active layer
+  const activeLayer = layers.find(layer => layer.id === activeLayerId);
+
   return (
     <div className="mb-2 flex justify-between items-center">
       <div className="flex items-center space-x-2">
         <DropdownMenu>
           <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
             <Layers className="mr-2 h-4 w-4" />
-            <span>{layers.find(layer => layer.id === activeLayerId)?.name || "Calque"}</span>
+            <span>{activeLayer?.name || "Calque"}</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="min-w-[280px] bg-white z-50">
             {layers.map((layer) => (
