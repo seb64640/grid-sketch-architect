@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -67,16 +66,20 @@ export const Canvas: React.FC<CanvasProps> = ({
   const historyIndexRef = useRef<number>(-1);
   const isHistoryActionRef = useRef<boolean>(false);
 
-  // Track which objects belong to which layer - FIX: Utiliser un Map pour éviter la duplication
+  // Track which objects belong to which layer
   const layerObjectsMap = useRef<Map<string, fabric.Object[]>>(new Map());
   
-  // Flag to prevent excessive re-renders - FIX
+  // Flag to prevent excessive re-renders
   const isLayerUpdateInProgress = useRef<boolean>(false);
+  
+  // Debug flag
+  const debugMode = useRef<boolean>(false);
 
   // Initialize fabric canvas
   useEffect(() => {
     if (!canvasRef.current) return;
 
+    console.log("Initializing fabric canvas");
     const canvas = new fabric.Canvas(canvasRef.current, {
       width,
       height,
@@ -89,9 +92,13 @@ export const Canvas: React.FC<CanvasProps> = ({
     
     // Initialize the layer objects map with empty arrays for each layer
     if (layers && layers.length > 0) {
+      console.log(`Initializing layers map with ${layers.length} layers`);
       layers.forEach(layer => {
         if (!layerObjectsMap.current.has(layer.id)) {
           layerObjectsMap.current.set(layer.id, []);
+          if (debugMode.current) {
+            console.log(`Added layer to map: ${layer.id} (${layer.name})`);
+          }
         }
       });
     }
@@ -108,23 +115,20 @@ export const Canvas: React.FC<CanvasProps> = ({
             canvas.remove(obj);
             
             // Remove from all layers
-            layers.forEach(layer => {
-              const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-              const updatedLayerObjects = layerObjects.filter(o => o !== obj);
-              layerObjectsMap.current.set(layer.id, updatedLayerObjects);
-            });
+            for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
+              const index = layerObjects.indexOf(obj);
+              if (index >= 0) {
+                layerObjects.splice(index, 1);
+                if (debugMode.current) {
+                  console.log(`Removed object from layer ${layerId}`);
+                }
+                break;
+              }
+            }
           });
           
-          // Mettre à jour l'état des calques - CORRECTION
-          setLayers(prevLayers => {
-            return prevLayers.map(layer => {
-              const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-              return {
-                ...layer,
-                objects: [...layerObjects] // Mise à jour avec la référence actuelle
-              };
-            });
-          });
+          // Update layers state
+          updateLayersWithObjects();
           
           canvas.discardActiveObject();
           canvas.requestRenderAll();
@@ -166,23 +170,36 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
       }
       
-      // FIX: s'assurer que l'objet est associé au bon calque et une seule fois
-      const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+      // Add object only to the active layer
+      if (debugMode.current) {
+        console.log(`Object added to canvas, assigning to active layer: ${activeLayerId}`);
+      }
+      
+      // Get current active layer objects
+      let layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+      
+      // Check if object isn't already in this layer
       if (!layerObjects.includes(e.target)) {
         layerObjects.push(e.target);
         layerObjectsMap.current.set(activeLayerId, layerObjects);
-      
-        // Seulement mise à jour si l'objet n'existait pas déjà
-        setLayers(prevLayers => 
-          prevLayers.map(layer => 
-            layer.id === activeLayerId 
-              ? { ...layer, objects: [...layerObjects] } 
-              : layer
-          )
-        );
+        
+        // Add custom property to the object to track its layer
+        e.target.toObject = (function(toObject) {
+          return function(propertiesToInclude) {
+            return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
+              layerId: activeLayerId
+            });
+          };
+        })(e.target.toObject);
+        
+        if (debugMode.current) {
+          console.log(`Added object to layer ${activeLayerId}, total objects in layer: ${layerObjects.length}`);
+        }
+        
+        // Update layers state
+        updateLayersWithObjects();
         
         saveHistoryState([e.target], 'add', activeLayerId);
-        console.log(`Objet ajouté au calque ${activeLayerId}, total: ${layerObjects.length}`);
       }
     });
 
@@ -276,60 +293,56 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, [width, height]);
 
-  // CORRECTION: Optimisation de la gestion des calques
-  useEffect(() => {
-    if (!fabricCanvasRef.current || isLayerUpdateInProgress.current) return;
+  // Helper function to update the layers state with current objects
+  const updateLayersWithObjects = () => {
+    if (isLayerUpdateInProgress.current) return;
     
     isLayerUpdateInProgress.current = true;
-    const canvas = fabricCanvasRef.current;
-    console.log("Layer update effect triggered, activeLayerId:", activeLayerId);
     
-    // 1. Garder la grille et les points temporaires
-    const objectsToKeep = [];
-    canvas.getObjects().forEach(obj => {
-      if ((gridRef.current && (gridRef.current === obj || gridRef.current.contains(obj))) || 
-          obj === tempPointRef.current) {
-        objectsToKeep.push(obj);
-      }
-    });
-    
-    // 2. Nettoyer le canvas
-    canvas.clear();
-    
-    // 3. Remettre la grille et les points temporaires
-    objectsToKeep.forEach(obj => canvas.add(obj));
-    
-    // 4. Ajouter les objets de tous les calques visibles
-    layers.forEach(layer => {
-      if (!layer || !layer.visible) return;
-      
-      const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-      console.log(`Calque ${layer.id} (${layer.name}): ${layerObjects.length} objets`);
-      
-      layerObjects.forEach(obj => {
-        // Vérifier que l'objet n'est pas déjà sur le canvas
-        if (!canvas.contains(obj)) {
-          canvas.add(obj);
-        }
-        
-        // Appliquer les paramètres de sélection et d'interaction
-        const isActive = layer.id === activeLayerId;
-        obj.selectable = isActive && !layer.locked && activeTool === "select";
-        obj.evented = isActive && !layer.locked;
+    setLayers(prevLayers => {
+      return prevLayers.map(layer => {
+        const layerObjects = layerObjectsMap.current.get(layer.id) || [];
+        return {
+          ...layer,
+          objects: [...layerObjects]
+        };
       });
     });
     
-    // S'assurer que les objets du calque actif sont au-dessus
-    const activeLayerObjects = layerObjectsMap.current.get(activeLayerId) || [];
-    activeLayerObjects.forEach(obj => obj.bringToFront());
+    setTimeout(() => {
+      isLayerUpdateInProgress.current = false;
+    }, 0);
+  };
+
+  // Effect to handle layer changes and visibility
+  useEffect(() => {
+    if (!fabricCanvasRef.current) return;
     
-    // S'assurer que la grille est toujours au fond
-    if (gridRef.current) {
-      gridRef.current.sendToBack();
+    const canvas = fabricCanvasRef.current;
+    console.log("Layer update effect triggered. Active layer:", activeLayerId);
+    
+    // Update objects visibility based on layer settings
+    for (const layer of layers) {
+      const layerObjects = layerObjectsMap.current.get(layer.id) || [];
+      
+      for (const obj of layerObjects) {
+        // Objects should be visible if their layer is visible
+        if (obj && obj.visible !== undefined) {
+          obj.visible = layer.visible;
+          
+          // Objects should be selectable and evented only if they are on the active layer and not locked
+          const isActive = layer.id === activeLayerId;
+          obj.selectable = isActive && !layer.locked && activeTool === "select";
+          obj.evented = isActive && !layer.locked;
+          
+          if (debugMode.current) {
+            console.log(`Updated object in layer ${layer.id}: visible=${obj.visible}, selectable=${obj.selectable}`);
+          }
+        }
+      }
     }
     
     canvas.requestRenderAll();
-    isLayerUpdateInProgress.current = false;
   }, [layers, activeLayerId, activeTool]);
 
   // Save the current state to history
@@ -369,21 +382,20 @@ export const Canvas: React.FC<CanvasProps> = ({
           canvas.remove(obj);
           
           // Remove from layer
-          const layerObjects = layerObjectsMap.current.get(action.layerId) || [];
-          const updatedLayerObjects = layerObjects.filter(o => o !== obj);
-          layerObjectsMap.current.set(action.layerId, updatedLayerObjects);
+          for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
+            const index = layerObjects.indexOf(obj);
+            if (index >= 0) {
+              layerObjects.splice(index, 1);
+              if (debugMode.current) {
+                console.log(`Removed object from layer ${layerId}`);
+              }
+              break;
+            }
+          }
         });
         
         // CORRECTION: Mise à jour correcte après modifications
-        setLayers(prevLayers => {
-          return prevLayers.map(layer => {
-            if (layer.id === action.layerId) {
-              const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-              return { ...layer, objects: [...layerObjects] };
-            }
-            return layer;
-          });
-        });
+        updateLayersWithObjects();
         
         toast("Action annulée");
       } else if (action.type === 'remove') {
@@ -392,23 +404,21 @@ export const Canvas: React.FC<CanvasProps> = ({
           canvas.add(obj);
           
           // Add back to layer
-          const layerObjects = layerObjectsMap.current.get(action.layerId) || [];
-          if (!layerObjects.includes(obj)) {
-            layerObjects.push(obj);
-            layerObjectsMap.current.set(action.layerId, layerObjects);
+          for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
+            const index = layerObjects.indexOf(obj);
+            if (index >= 0) {
+              layerObjects.push(obj);
+              layerObjectsMap.current.set(layerId, layerObjects);
+              if (debugMode.current) {
+                console.log(`Added object to layer ${layerId}`);
+              }
+              break;
+            }
           }
         });
         
         // CORRECTION: Mise à jour correcte après modifications
-        setLayers(prevLayers => {
-          return prevLayers.map(layer => {
-            if (layer.id === action.layerId) {
-              const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-              return { ...layer, objects: [...layerObjects] };
-            }
-            return layer;
-          });
-        });
+        updateLayersWithObjects();
         
         toast("Suppression annulée");
       } else if (action.type === 'modify') {
@@ -448,23 +458,21 @@ export const Canvas: React.FC<CanvasProps> = ({
           canvas.add(obj);
           
           // Add to layer if not already there
-          const layerObjects = layerObjectsMap.current.get(action.layerId) || [];
-          if (!layerObjects.includes(obj)) {
-            layerObjects.push(obj);
-            layerObjectsMap.current.set(action.layerId, layerObjects);
+          for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
+            const index = layerObjects.indexOf(obj);
+            if (index >= 0) {
+              layerObjects.push(obj);
+              layerObjectsMap.current.set(layerId, layerObjects);
+              if (debugMode.current) {
+                console.log(`Added object to layer ${layerId}`);
+              }
+              break;
+            }
           }
         });
         
         // CORRECTION: Mise à jour correcte après modifications
-        setLayers(prevLayers => {
-          return prevLayers.map(layer => {
-            if (layer.id === action.layerId) {
-              const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-              return { ...layer, objects: [...layerObjects] };
-            }
-            return layer;
-          });
-        });
+        updateLayersWithObjects();
         
         toast("Action rétablie");
       } else if (action.type === 'remove') {
@@ -475,22 +483,21 @@ export const Canvas: React.FC<CanvasProps> = ({
             canvas.remove(canvasObject);
             
             // Remove from layer
-            const layerObjects = layerObjectsMap.current.get(action.layerId) || [];
-            const updatedLayerObjects = layerObjects.filter(o => o !== obj);
-            layerObjectsMap.current.set(action.layerId, updatedLayerObjects);
+            for (const [layerId, layerObjects] of layerObjectsMap.current.entries()) {
+              const index = layerObjects.indexOf(obj);
+              if (index >= 0) {
+                layerObjects.splice(index, 1);
+                if (debugMode.current) {
+                  console.log(`Removed object from layer ${layerId}`);
+                }
+                break;
+              }
+            }
           }
         });
         
         // CORRECTION: Mise à jour correcte après modifications
-        setLayers(prevLayers => {
-          return prevLayers.map(layer => {
-            if (layer.id === action.layerId) {
-              const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-              return { ...layer, objects: [...layerObjects] };
-            }
-            return layer;
-          });
-        });
+        updateLayersWithObjects();
         
         toast("Suppression rétablie");
       } else if (action.type === 'modify') {
@@ -842,8 +849,30 @@ export const Canvas: React.FC<CanvasProps> = ({
           evented: true
         });
         
-        // Pas besoin d'ajouter à la liste du calque ici, c'est géré par l'événement 'object:added'
-        console.log(`Ligne créée sur le calque actif: ${activeLayerId}`);
+        // Add the object to the active layer
+        const lineObj = line;
+        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+        
+        if (!layerObjects.includes(lineObj)) {
+          layerObjects.push(lineObj);
+          layerObjectsMap.current.set(activeLayerId, layerObjects);
+          
+          // Add custom layerId property
+          lineObj.toObject = (function(toObject) {
+            return function(propertiesToInclude) {
+              return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
+                layerId: activeLayerId
+              });
+            };
+          })(lineObj.toObject);
+          
+          if (debugMode.current) {
+            console.log(`Added line to layer ${activeLayerId}, total: ${layerObjects.length}`);
+          }
+        }
+        
+        // Update layers state
+        updateLayersWithObjects();
       }
       
       startPointRef.current = null;
@@ -952,8 +981,30 @@ export const Canvas: React.FC<CanvasProps> = ({
           evented: true
         });
         
-        // Pas besoin d'ajouter à la liste du calque ici, c'est géré par l'événement 'object:added'
-        console.log(`Cercle créé sur le calque actif: ${activeLayerId}`);
+        // Add the object to the active layer
+        const circleObj = circle;
+        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+        
+        if (!layerObjects.includes(circleObj)) {
+          layerObjects.push(circleObj);
+          layerObjectsMap.current.set(activeLayerId, layerObjects);
+          
+          // Add custom layerId property
+          circleObj.toObject = (function(toObject) {
+            return function(propertiesToInclude) {
+              return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
+                layerId: activeLayerId
+              });
+            };
+          })(circleObj.toObject);
+          
+          if (debugMode.current) {
+            console.log(`Added circle to layer ${activeLayerId}, total: ${layerObjects.length}`);
+          }
+        }
+        
+        // Update layers state
+        updateLayersWithObjects();
       }
       
       startPointRef.current = null;
@@ -1061,8 +1112,30 @@ export const Canvas: React.FC<CanvasProps> = ({
           evented: true
         });
         
-        // Pas besoin d'ajouter à la liste du calque ici, c'est géré par l'événement 'object:added'
-        console.log(`Rectangle créé sur le calque actif: ${activeLayerId}`);
+        // Add the object to the active layer
+        const rectObj = rect;
+        const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+        
+        if (!layerObjects.includes(rectObj)) {
+          layerObjects.push(rectObj);
+          layerObjectsMap.current.set(activeLayerId, layerObjects);
+          
+          // Add custom layerId property
+          rectObj.toObject = (function(toObject) {
+            return function(propertiesToInclude) {
+              return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
+                layerId: activeLayerId
+              });
+            };
+          })(rectObj.toObject);
+          
+          if (debugMode.current) {
+            console.log(`Added rectangle to layer ${activeLayerId}, total: ${layerObjects.length}`);
+          }
+        }
+        
+        // Update layers state
+        updateLayersWithObjects();
       }
       
       startPointRef.current = null;
@@ -1102,13 +1175,33 @@ export const Canvas: React.FC<CanvasProps> = ({
         editable: true,
       });
       
+      // Add custom layerId property
+      text.toObject = (function(toObject) {
+        return function(propertiesToInclude) {
+          return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
+            layerId: activeLayerId
+          });
+        };
+      })(text.toObject);
+      
       canvas.add(text);
       canvas.setActiveObject(text);
       text.enterEditing();
       text.selectAll();
       
-      // Pas besoin d'ajouter à la liste du calque ici, c'est géré par l'événement 'object:added'
-      console.log(`Texte créé sur le calque actif: ${activeLayerId}`);
+      // Add to layer
+      const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
+      if (!layerObjects.includes(text)) {
+        layerObjects.push(text);
+        layerObjectsMap.current.set(activeLayerId, layerObjects);
+        
+        if (debugMode.current) {
+          console.log(`Added text to layer ${activeLayerId}, total: ${layerObjects.length}`);
+        }
+        
+        // Update layers state
+        updateLayersWithObjects();
+      }
       
       canvas.requestRenderAll();
     });
@@ -1177,15 +1270,7 @@ export const Canvas: React.FC<CanvasProps> = ({
             objects.splice(index, 1);
             
             // Update layers state - CORRECTION
-            setLayers(prevLayers => {
-              return prevLayers.map(layer => {
-                if (layer.id === layerId) {
-                  const layerObjects = layerObjectsMap.current.get(layer.id) || [];
-                  return { ...layer, objects: [...layerObjects] };
-                }
-                return layer;
-              });
-            });
+            updateLayersWithObjects();
             
             canvas.requestRenderAll();
             toast("Objet supprimé");

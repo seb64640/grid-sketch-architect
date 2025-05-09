@@ -4,7 +4,8 @@ import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { Layers, Eye, EyeOff, Lock, Unlock } from "lucide-react";
+import { Layers, Eye, EyeOff, Lock, Unlock, Edit, Check } from "lucide-react";
+import { Input } from "./ui/input";
 
 export interface Layer {
   id: string;
@@ -37,6 +38,10 @@ export const GridSketch = () => {
   // Print mode
   const [isPrintMode, setIsPrintMode] = useState(false);
 
+  // Layer being edited state
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [editLayerName, setEditLayerName] = useState("");
+
   // Layers management - Initialize with a default layer
   const [layers, setLayers] = useState<Layer[]>([
     {
@@ -62,7 +67,7 @@ export const GridSketch = () => {
 
   // Layer management functions
   const addLayer = () => {
-    const newLayerId = `layer-${layers.length + 1}`;
+    const newLayerId = `layer-${Date.now()}`; // Using timestamp to ensure unique IDs
     const newLayer: Layer = {
       id: newLayerId,
       name: `Calque ${layers.length + 1}`,
@@ -124,6 +129,24 @@ export const GridSketch = () => {
     setLayers(updatedLayers);
     const targetLayer = layers.find(layer => layer.id === layerId);
     toast(`Calque ${targetLayer?.name} ${targetLayer?.locked ? "déverrouillé" : "verrouillé"}`);
+  };
+
+  // Start editing a layer name
+  const startEditLayerName = (layerId: string, currentName: string) => {
+    setEditingLayerId(layerId);
+    setEditLayerName(currentName);
+  };
+
+  // Save edited layer name
+  const saveLayerName = () => {
+    if (!editingLayerId || editLayerName.trim() === "") {
+      setEditingLayerId(null);
+      return;
+    }
+
+    renameLayer(editingLayerId, editLayerName.trim());
+    setEditingLayerId(null);
+    setEditLayerName("");
   };
 
   const renameLayer = (layerId: string, newName: string) => {
@@ -269,56 +292,99 @@ export const GridSketch = () => {
                 <Layers className="mr-2 h-4 w-4" />
                 <span>{layers.find(layer => layer.id === activeLayerId)?.name || "Calque"}</span>
               </DropdownMenuTrigger>
-              <DropdownMenuContent>
+              <DropdownMenuContent className="min-w-[280px] bg-white">
                 {layers.map((layer) => (
                   <DropdownMenuItem
                     key={layer.id}
-                    className={`flex items-center justify-between ${layer.id === activeLayerId ? 'bg-accent' : ''}`}
-                    onClick={() => setActiveLayerId(layer.id)}
+                    className={`flex items-center justify-between p-2 ${layer.id === activeLayerId ? 'bg-accent' : ''}`}
+                    onClick={() => layer.id !== editingLayerId && setActiveLayerId(layer.id)}
                   >
-                    <div className="flex items-center">
-                      {layer.visible ? 
-                        <Eye className="h-4 w-4 mr-2" /> : 
-                        <EyeOff className="h-4 w-4 mr-2 text-gray-400" />
-                      }
-                      {layer.locked ? 
-                        <Lock className="h-4 w-4 mr-2" /> : 
-                        <Unlock className="h-4 w-4 mr-2 text-gray-400" />
-                      }
-                      <span>{layer.name}</span>
-                    </div>
-                    <div className="ml-2 space-x-2">
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleLayerVisibility(layer.id);
-                        }}
-                        className="text-xs px-1 py-0.5"
-                      >
-                        {layer.visible ? 'Masquer' : 'Afficher'}
-                      </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleLayerLock(layer.id);
-                        }}
-                        className="text-xs px-1 py-0.5"
-                      >
-                        {layer.locked ? 'Déverrouiller' : 'Verrouiller'}
-                      </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeLayer(layer.id);
-                        }}
-                        className="text-xs text-red-500 px-1 py-0.5"
-                      >
-                        Supprimer
-                      </button>
-                    </div>
+                    {editingLayerId === layer.id ? (
+                      <div className="flex items-center space-x-2 w-full">
+                        <Input 
+                          value={editLayerName} 
+                          onChange={(e) => setEditLayerName(e.target.value)}
+                          className="h-8 w-full"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              saveLayerName();
+                            } else if (e.key === 'Escape') {
+                              setEditingLayerId(null);
+                            }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            saveLayerName();
+                          }}
+                          className="p-1 rounded-full hover:bg-gray-100"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center">
+                          {layer.visible ? 
+                            <Eye className="h-4 w-4 mr-2" /> : 
+                            <EyeOff className="h-4 w-4 mr-2 text-gray-400" />
+                          }
+                          {layer.locked ? 
+                            <Lock className="h-4 w-4 mr-2" /> : 
+                            <Unlock className="h-4 w-4 mr-2 text-gray-400" />
+                          }
+                          <span>{layer.name}</span>
+                        </div>
+                        <div className="ml-2 space-x-1">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startEditLayerName(layer.id, layer.name);
+                            }}
+                            className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
+                            title="Renommer"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleLayerVisibility(layer.id);
+                            }}
+                            className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
+                            title={layer.visible ? 'Masquer' : 'Afficher'}
+                          >
+                            {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleLayerLock(layer.id);
+                            }}
+                            className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
+                            title={layer.locked ? 'Déverrouiller' : 'Verrouiller'}
+                          >
+                            {layer.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeLayer(layer.id);
+                            }}
+                            className="text-xs text-red-500 px-1 py-0.5 hover:bg-red-50 rounded"
+                            title="Supprimer"
+                          >
+                            <trash className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </DropdownMenuItem>
                 ))}
-                <DropdownMenuItem onClick={addLayer} className="text-green-600">
+                <DropdownMenuItem onClick={addLayer} className="text-green-600 p-2">
                   + Nouveau calque
                 </DropdownMenuItem>
               </DropdownMenuContent>
