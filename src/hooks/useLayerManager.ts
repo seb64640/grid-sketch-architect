@@ -60,7 +60,10 @@ export const useLayerManager = () => {
     };
     
     // Add the layer and set it as active
-    setLayers(prevLayers => [...prevLayers, newLayer]);
+    setLayers(prevLayers => {
+      console.log("Adding new layer. Previous layers:", prevLayers.length, "New layer ID:", newLayerId);
+      return [...prevLayers, newLayer];
+    });
     setActiveLayerId(newLayerId);
     
     console.log("New layer added:", newLayerId, newLayerName);
@@ -89,7 +92,11 @@ export const useLayerManager = () => {
     }
     
     // Then remove the layer
-    setLayers(prevLayers => prevLayers.filter(layer => layer.id !== layerId));
+    setLayers(prevLayers => {
+      const filtered = prevLayers.filter(layer => layer.id !== layerId);
+      console.log(`Removing layer ${layerId}. Layers count: before=${prevLayers.length}, after=${filtered.length}`);
+      return filtered;
+    });
     
     const targetLayer = layers.find(layer => layer.id === layerId);
     toast(`Calque ${targetLayer?.name || ''} supprimé`);
@@ -172,30 +179,49 @@ export const useLayerManager = () => {
     setEditLayerName("");
   }, [editingLayerId, editLayerName, layers, generateUniqueLayerName]);
 
-  // Update layer objects with safety checks
+  // Update layer objects with safety checks - SIMPLIFIÉE ET CORRIGÉE
   const updateLayerObjects = useCallback((layerId: string, objects: any[]) => {
-    // Find the layer to update
-    const layerIndex = layers.findIndex(layer => layer.id === layerId);
-    if (layerIndex === -1) {
-      console.error(`Attempted to update objects for non-existent layer: ${layerId}`);
+    // Évite les mises à jour en cascade
+    if (isUpdatingRef.current) {
+      console.log("Skipping recursive updateLayerObjects call");
       return;
     }
+
+    isUpdatingRef.current = true;
     
     console.log(`Updating objects for layer ${layerId}, count: ${objects.length}`);
     
-    // Create a deep copy of the layers array to ensure proper state update
-    const updatedLayers = [...layers];
-    // Update the specific layer's objects
-    updatedLayers[layerIndex] = {
-      ...updatedLayers[layerIndex],
-      objects: [...objects]
-    };
-    
-    // Update the state
-    setLayers(updatedLayers);
-    
-    console.log(`Layer ${layerId} updated, objects count now: ${objects.length}`);
-  }, [layers]);
+    setLayers(prevLayers => {
+      // Trouvez le calque à mettre à jour
+      const layerIndex = prevLayers.findIndex(layer => layer.id === layerId);
+      
+      // Si le calque n'existe pas, retournez l'état inchangé
+      if (layerIndex === -1) {
+        console.error(`Attempted to update objects for non-existent layer: ${layerId}`);
+        return prevLayers;
+      }
+      
+      // Créez une copie profonde du tableau de calques
+      const updatedLayers = [...prevLayers];
+      
+      // Mettez à jour les objets du calque spécifique
+      updatedLayers[layerIndex] = {
+        ...updatedLayers[layerIndex],
+        objects: [...objects]  // Copie des objets pour éviter des références partagées
+      };
+      
+      console.log(`Layer ${layerId} updated, objects count now: ${objects.length}`);
+      console.log(`Total layers after update: ${updatedLayers.length}`);
+      
+      // IMPORTANT: Nous retournons une nouvelle référence du tableau entier
+      return updatedLayers;
+    });
+
+    // Réinitialiser le drapeau après la mise à jour
+    setTimeout(() => {
+      isUpdatingRef.current = false;
+    }, 0);
+  }, []);
 
   // Get a specific layer by ID
   const getLayerById = useCallback((layerId: string) => {
