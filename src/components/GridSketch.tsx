@@ -1,18 +1,12 @@
+
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
 import { toast } from "sonner";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { Layers, Eye, EyeOff, Lock, Unlock, Edit, Check, Trash } from "lucide-react";
-import { Input } from "./ui/input";
-
-export interface Layer {
-  id: string;
-  name: string;
-  visible: boolean;
-  locked: boolean;
-  objects: any[]; // Fabric.js objects
-}
+import { useLayerManager } from '../hooks/useLayerManager';
+import { useGridSettings } from '../hooks/useGridSettings';
+import { useDrawingStyles } from '../hooks/useDrawingStyles';
+import { LayerManager } from './LayerManager';
 
 export const GridSketch = () => {
   // Canvas dimensions et référence du conteneur
@@ -24,34 +18,16 @@ export const GridSketch = () => {
   const [activeTool, setActiveTool] = useState<Tool>("select");
   
   // Grid settings
-  const [gridVisible, setGridVisible] = useState(true);
-  const [snapToGrid, setSnapToGrid] = useState(true);
-  const [gridSize, setGridSize] = useState(20);
-  const [gridDensity, setGridDensity] = useState(20);
+  const gridSettings = useGridSettings();
   
   // Style settings
-  const [strokeWidth, setStrokeWidth] = useState(2);
-  const [strokeColor, setStrokeColor] = useState("#000000");
-  const [fillColor, setFillColor] = useState("rgba(200, 200, 255, 0.1)");
+  const drawingStyles = useDrawingStyles();
   
   // Print mode
   const [isPrintMode, setIsPrintMode] = useState(false);
 
-  // Layer being edited state
-  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
-  const [editLayerName, setEditLayerName] = useState("");
-
-  // Layers management - Initialize with a default layer
-  const [layers, setLayers] = useState<Layer[]>([
-    {
-      id: "layer-1",
-      name: "Calque 1",
-      visible: true,
-      locked: false,
-      objects: []
-    }
-  ]);
-  const [activeLayerId, setActiveLayerId] = useState<string>("layer-1");
+  // Layer management
+  const layerManager = useLayerManager();
 
   // History control
   const undoAction = useCallback(() => {
@@ -63,158 +39,6 @@ export const GridSketch = () => {
     // This will be overridden by the Canvas component
     toast("Rétablir");
   }, []);
-
-  // Helper function to generate unique layer name
-  const generateUniqueLayerName = useCallback(() => {
-    // Get all existing layer numbers from names like "Calque X"
-    const existingNumbers = layers.map(layer => {
-      const match = layer.name.match(/Calque\s+(\d+)/i);
-      return match ? parseInt(match[1], 10) : 0;
-    });
-
-    // Find the highest number
-    const highestNumber = Math.max(...existingNumbers, 0);
-    
-    // Return the next number in sequence
-    return `Calque ${highestNumber + 1}`;
-  }, [layers]);
-
-  // Layer management functions
-  const addLayer = () => {
-    const newLayerId = `layer-${Date.now()}`; // Using timestamp to ensure unique IDs
-    const newLayerName = generateUniqueLayerName();
-    
-    // Create a new layer without changing visibility of existing layers
-    const newLayer: Layer = {
-      id: newLayerId,
-      name: newLayerName,
-      visible: true,
-      locked: false,
-      objects: [] // Initialize with empty objects array
-    };
-    
-    // Important: We need to preserve the exact objects references in the existing layers
-    // The issue is that the Canvas component might be mutating these objects directly
-    setLayers(prevLayers => {
-      // Deep log of the layer content to debug
-      console.log("Adding new layer. Current layers objects count:", prevLayers.map(l => ({
-        id: l.id,
-        name: l.name,
-        objectCount: l.objects?.length || 0
-      })));
-      
-      // We need to create a new array but keep the existing layer objects references intact
-      return [...prevLayers, newLayer];
-    });
-    
-    // Update the active layer id AFTER setting layers to ensure the state is updated correctly
-    setTimeout(() => {
-      setActiveLayerId(newLayerId);
-      console.log("Active layer changed to:", newLayerId);
-    }, 10);
-    
-    toast(`Nouveau calque: ${newLayer.name}`);
-  };
-
-  const removeLayer = (layerId: string) => {
-    // Don't allow removing the last layer
-    if (layers.length <= 1) {
-      toast.error("Impossible de supprimer le dernier calque");
-      return;
-    }
-    
-    const updatedLayers = layers.filter(layer => layer.id !== layerId);
-    setLayers(updatedLayers);
-    
-    // If active layer was removed, select another one
-    if (activeLayerId === layerId) {
-      setActiveLayerId(updatedLayers[0].id);
-    }
-    
-    toast("Calque supprimé");
-  };
-
-  const toggleLayerVisibility = (layerId: string) => {
-    setLayers(prevLayers => prevLayers.map(layer => {
-      if (layer.id === layerId) {
-        const newVisibility = !layer.visible;
-        console.log(`Toggling visibility for layer ${layer.name} (${layer.id}) to ${newVisibility}`);
-        return {
-          ...layer,
-          visible: newVisibility
-        };
-      }
-      return layer;
-    }));
-    
-    const targetLayer = layers.find(layer => layer.id === layerId);
-    toast(`Calque ${targetLayer?.name} ${targetLayer?.visible ? "masqué" : "visible"}`);
-  };
-
-  const toggleLayerLock = (layerId: string) => {
-    setLayers(prevLayers => prevLayers.map(layer => {
-      if (layer.id === layerId) {
-        const newLockState = !layer.locked;
-        console.log(`Toggling lock for layer ${layer.name} (${layer.id}) to ${newLockState}`);
-        return {
-          ...layer,
-          locked: newLockState
-        };
-      }
-      return layer;
-    }));
-    
-    const targetLayer = layers.find(layer => layer.id === layerId);
-    toast(`Calque ${targetLayer?.name} ${targetLayer?.locked ? "déverrouillé" : "verrouillé"}`);
-  };
-
-  // Start editing a layer name
-  const startEditLayerName = (layerId: string, currentName: string) => {
-    setEditingLayerId(layerId);
-    setEditLayerName(currentName);
-  };
-
-  // Save edited layer name
-  const saveLayerName = () => {
-    if (!editingLayerId || editLayerName.trim() === "") {
-      setEditingLayerId(null);
-      return;
-    }
-
-    // Ensure the name is unique if it's in the format "Calque X"
-    let finalName = editLayerName.trim();
-    const isDefaultFormat = /^Calque\s+\d+$/i.test(finalName);
-    
-    if (isDefaultFormat) {
-      // If it's using the default "Calque X" format, ensure uniqueness
-      let nameIsUnique = layers.every(layer => 
-        layer.id === editingLayerId || layer.name !== finalName
-      );
-      
-      if (!nameIsUnique) {
-        // If not unique, generate a new unique name
-        finalName = generateUniqueLayerName();
-      }
-    }
-
-    renameLayer(editingLayerId, finalName);
-    setEditingLayerId(null);
-    setEditLayerName("");
-  };
-
-  const renameLayer = (layerId: string, newName: string) => {
-    setLayers(prevLayers => prevLayers.map(layer => {
-      if (layer.id === layerId) {
-        return {
-          ...layer,
-          name: newName
-        };
-      }
-      return layer;
-    }));
-    
-    toast(`Calque renommé en: ${newName}`);
-  };
 
   // Adjust canvas size based on window size and handle resize events
   useEffect(() => {
@@ -278,10 +102,10 @@ export const GridSketch = () => {
           setActiveTool("erase");
           break;
         case "g":
-          toggleGridVisibility();
+          gridSettings.toggleGridVisibility();
           break;
         case "s":
-          toggleSnapToGrid();
+          gridSettings.toggleSnapToGrid();
           break;
       }
     };
@@ -291,17 +115,7 @@ export const GridSketch = () => {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [gridVisible, snapToGrid]);
-
-  const toggleGridVisibility = () => {
-    setGridVisible(!gridVisible);
-    toast(gridVisible ? "Grille masquée" : "Grille visible");
-  };
-
-  const toggleSnapToGrid = () => {
-    setSnapToGrid(!snapToGrid);
-    toast(snapToGrid ? "Alignement désactivé" : "Alignement activé");
-  };
+  }, [gridSettings]);
 
   const clearCanvas = () => {
     // Implementation will be through the Canvas component
@@ -313,42 +127,23 @@ export const GridSketch = () => {
     toast(isPrintMode ? "Mode éditeur" : "Mode impression");
   };
 
-  // Log layer changes when the active layer changes (for debugging)
-  useEffect(() => {
-    console.log("Active layer changed to:", activeLayerId);
-    console.log("Current layers:", layers);
-  }, [activeLayerId, layers]);
-
-  // Add a useEffect to track layer object changes
-  useEffect(() => {
-    console.log("Layers state updated - objects per layer:",
-      layers.map(layer => ({
-        id: layer.id, 
-        name: layer.name,
-        objectCount: layer.objects?.length || 0,
-        visible: layer.visible,
-        locked: layer.locked
-      }))
-    );
-  }, [layers]);
-
   return (
     <div className="flex flex-col h-full">
       <ToolBar
         activeTool={activeTool}
-        gridVisible={gridVisible}
-        snapToGrid={snapToGrid}
+        gridVisible={gridSettings.gridVisible}
+        snapToGrid={gridSettings.snapToGrid}
         setActiveTool={setActiveTool}
-        toggleGridVisibility={toggleGridVisibility}
-        toggleSnapToGrid={toggleSnapToGrid}
+        toggleGridVisibility={gridSettings.toggleGridVisibility}
+        toggleSnapToGrid={gridSettings.toggleSnapToGrid}
         clearCanvas={clearCanvas}
         printMode={togglePrintMode}
         undoAction={undoAction}
         redoAction={redoAction}
-        gridSize={gridSize}
-        setGridSize={setGridSize}
-        strokeColor={strokeColor}
-        setStrokeColor={setStrokeColor}
+        gridSize={gridSettings.gridSize}
+        setGridSize={gridSettings.setGridSize}
+        strokeColor={drawingStyles.strokeColor}
+        setStrokeColor={drawingStyles.setStrokeColor}
       />
       
       <div 
@@ -356,130 +151,38 @@ export const GridSketch = () => {
         ref={containerRef}
       >
         {/* Layer controls */}
-        <div className="mb-2 flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2">
-                <Layers className="mr-2 h-4 w-4" />
-                <span>{layers.find(layer => layer.id === activeLayerId)?.name || "Calque"}</span>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="min-w-[280px] bg-white z-50">
-                {layers.map((layer) => (
-                  <DropdownMenuItem
-                    key={layer.id}
-                    className={`flex items-center justify-between p-2 ${layer.id === activeLayerId ? 'bg-accent' : ''}`}
-                    onClick={() => layer.id !== editingLayerId && setActiveLayerId(layer.id)}
-                  >
-                    {editingLayerId === layer.id ? (
-                      <div className="flex items-center space-x-2 w-full">
-                        <Input 
-                          value={editLayerName} 
-                          onChange={(e) => setEditLayerName(e.target.value)}
-                          className="h-8 w-full"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              saveLayerName();
-                            } else if (e.key === 'Escape') {
-                              setEditingLayerId(null);
-                            }
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            saveLayerName();
-                          }}
-                          className="p-1 rounded-full hover:bg-gray-100"
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex items-center">
-                          {layer.visible ? 
-                            <Eye className="h-4 w-4 mr-2" /> : 
-                            <EyeOff className="h-4 w-4 mr-2 text-gray-400" />
-                          }
-                          {layer.locked ? 
-                            <Lock className="h-4 w-4 mr-2" /> : 
-                            <Unlock className="h-4 w-4 mr-2 text-gray-400" />
-                          }
-                          <span>{layer.name}</span>
-                        </div>
-                        <div className="ml-2 space-x-1">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startEditLayerName(layer.id, layer.name);
-                            }}
-                            className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
-                            title="Renommer"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleLayerVisibility(layer.id);
-                            }}
-                            className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
-                            title={layer.visible ? 'Masquer' : 'Afficher'}
-                          >
-                            {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleLayerLock(layer.id);
-                            }}
-                            className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
-                            title={layer.locked ? 'Déverrouiller' : 'Verrouiller'}
-                          >
-                            {layer.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeLayer(layer.id);
-                            }}
-                            className="text-xs text-red-500 px-1 py-0.5 hover:bg-red-50 rounded"
-                            title="Supprimer"
-                          >
-                            <Trash className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem onClick={addLayer} className="text-green-600 p-2">
-                  + Nouveau calque
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
+        <LayerManager
+          layers={layerManager.layers}
+          activeLayerId={layerManager.activeLayerId}
+          editingLayerId={layerManager.editingLayerId}
+          editLayerName={layerManager.editLayerName}
+          setActiveLayerId={layerManager.setActiveLayerId}
+          addLayer={layerManager.addLayer}
+          removeLayer={layerManager.removeLayer}
+          toggleLayerVisibility={layerManager.toggleLayerVisibility}
+          toggleLayerLock={layerManager.toggleLayerLock}
+          startEditLayerName={layerManager.startEditLayerName}
+          saveLayerName={layerManager.saveLayerName}
+          setEditLayerName={layerManager.setEditLayerName}
+        />
 
         <Canvas
           width={canvasWidth}
           height={canvasHeight}
-          gridSize={gridSize}
-          gridDensity={gridDensity}
-          gridVisible={gridVisible}
-          snapToGrid={snapToGrid}
-          strokeWidth={strokeWidth}
-          strokeColor={strokeColor}
-          fillColor={fillColor}
+          gridSize={gridSettings.gridSize}
+          gridDensity={gridSettings.gridDensity}
+          gridVisible={gridSettings.gridVisible}
+          snapToGrid={gridSettings.snapToGrid}
+          strokeWidth={drawingStyles.strokeWidth}
+          strokeColor={drawingStyles.strokeColor}
+          fillColor={drawingStyles.fillColor}
           activeTool={activeTool}
           isPrintMode={isPrintMode}
           onUndo={undoAction}
           onRedo={redoAction}
-          layers={layers}
-          activeLayerId={activeLayerId}
-          setLayers={setLayers}
+          layers={layerManager.layers}
+          activeLayerId={layerManager.activeLayerId}
+          setLayers={layerManager.setLayers}
         />
       </div>
     </div>
