@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
@@ -65,12 +64,29 @@ export const GridSketch = () => {
     toast("Rétablir");
   }, []);
 
+  // Helper function to generate unique layer name
+  const generateUniqueLayerName = useCallback(() => {
+    // Get all existing layer numbers from names like "Calque X"
+    const existingNumbers = layers.map(layer => {
+      const match = layer.name.match(/Calque\s+(\d+)/i);
+      return match ? parseInt(match[1], 10) : 0;
+    });
+
+    // Find the highest number
+    const highestNumber = Math.max(...existingNumbers, 0);
+    
+    // Return the next number in sequence
+    return `Calque ${highestNumber + 1}`;
+  }, [layers]);
+
   // Layer management functions
   const addLayer = () => {
     const newLayerId = `layer-${Date.now()}`; // Using timestamp to ensure unique IDs
+    const newLayerName = generateUniqueLayerName();
+    
     const newLayer: Layer = {
       id: newLayerId,
-      name: `Calque ${layers.length + 1}`,
+      name: newLayerName,
       visible: true,
       locked: false,
       objects: [] // Initialize with empty objects array
@@ -144,7 +160,23 @@ export const GridSketch = () => {
       return;
     }
 
-    renameLayer(editingLayerId, editLayerName.trim());
+    // Ensure the name is unique if it's in the format "Calque X"
+    let finalName = editLayerName.trim();
+    const isDefaultFormat = /^Calque\s+\d+$/i.test(finalName);
+    
+    if (isDefaultFormat) {
+      // If it's using the default "Calque X" format, ensure uniqueness
+      let nameIsUnique = layers.every(layer => 
+        layer.id === editingLayerId || layer.name !== finalName
+      );
+      
+      if (!nameIsUnique) {
+        // If not unique, generate a new unique name
+        finalName = generateUniqueLayerName();
+      }
+    }
+
+    renameLayer(editingLayerId, finalName);
     setEditingLayerId(null);
     setEditLayerName("");
   };
