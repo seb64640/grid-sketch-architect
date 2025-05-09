@@ -56,18 +56,11 @@ export const useLayerManager = () => {
       objects: [] // Initialize with empty objects array
     };
     
-    // CRITICAL FIX: DO NOT create new object references for existing layer objects
-    setLayers(prevLayers => {
-      // Important: Just create a new array with all previous layers as is (not deep copied)
-      // plus the new layer - this preserves all object references
-      return [...prevLayers, newLayer];
-    });
+    // CRITICAL: Don't modify the existing layer objects at all - just add the new layer
+    setLayers(prevLayers => [...prevLayers, newLayer]);
     
-    // Update active layer ID AFTER setting layers to ensure the state is updated correctly
-    setTimeout(() => {
-      setActiveLayerId(newLayerId);
-      console.log("Active layer changed to:", newLayerId);
-    }, 10);
+    // Set active layer ID directly
+    setActiveLayerId(newLayerId);
     
     toast(`Nouveau calque: ${newLayer.name}`);
   }, [generateUniqueLayerName]);
