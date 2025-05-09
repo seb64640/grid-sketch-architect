@@ -93,8 +93,13 @@ export const GridSketch = () => {
       objects: [] // Initialize with empty objects array
     };
     
-    // Preserve all existing layers with their current visibility state
-    setLayers(prevLayers => [...prevLayers, newLayer]);
+    // Important: We keep all existing layers with their current state and objects
+    // Use the functional form of setState to ensure we're working with the most recent state
+    setLayers(prevLayers => {
+      console.log("Adding new layer, preserving existing layers:", prevLayers);
+      return [...prevLayers, newLayer];
+    });
+    
     setActiveLayerId(newLayerId);
     toast(`Nouveau calque: ${newLayer.name}`);
   };
