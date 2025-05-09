@@ -23,18 +23,22 @@ export const LayerActionButtons: React.FC<LayerActionButtonsProps> = ({
   onRemove,
   layerName
 }) => {
+  // Améliorons la gestion des événements pour éviter que les clics sur les boutons
+  // n'interfèrent avec les événements du canvas ou de sélection de calques
   const withStopPropagation = (handler: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
+    e.preventDefault();
     handler();
   };
 
   return (
-    <div className="ml-2 space-x-1 flex items-center">
+    <div className="ml-2 space-x-1 flex items-center" onClick={e => e.stopPropagation()}>
       <button
         onClick={withStopPropagation(() => onEdit(layerId, layerName))}
         className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
         title="Renommer"
         aria-label="Renommer le calque"
+        type="button"
       >
         <Edit className="h-4 w-4" />
       </button>
@@ -43,6 +47,7 @@ export const LayerActionButtons: React.FC<LayerActionButtonsProps> = ({
         className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
         title={visible ? 'Masquer' : 'Afficher'}
         aria-label={visible ? 'Masquer le calque' : 'Afficher le calque'}
+        type="button"
       >
         {visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
       </button>
@@ -51,6 +56,7 @@ export const LayerActionButtons: React.FC<LayerActionButtonsProps> = ({
         className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
         title={locked ? 'Déverrouiller' : 'Verrouiller'}
         aria-label={locked ? 'Déverrouiller le calque' : 'Verrouiller le calque'}
+        type="button"
       >
         {locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
       </button>
@@ -59,6 +65,7 @@ export const LayerActionButtons: React.FC<LayerActionButtonsProps> = ({
         className="text-xs text-red-500 px-1 py-0.5 hover:bg-red-50 rounded"
         title="Supprimer"
         aria-label="Supprimer le calque"
+        type="button"
       >
         <Trash className="h-4 w-4" />
       </button>

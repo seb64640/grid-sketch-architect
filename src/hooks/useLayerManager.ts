@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
@@ -129,12 +128,17 @@ export const useLayerManager = () => {
     const newLockState = !targetLayer.locked;
     console.log(`Toggling lock for layer ${layerId} to ${newLockState} (${targetLayer.name})`);
     
+    // Si le calque est le calque actif et qu'on le verrouille, mettons en évidence la contrainte
+    if (layerId === activeLayerId && newLockState) {
+      toast.warning(`Attention: Calque actif ${targetLayer.name} verrouillé - vous ne pourrez pas dessiner dessus`);
+    } else {
+      toast(`Calque ${targetLayer.name} ${newLockState ? "verrouillé" : "déverrouillé"}`);
+    }
+    
     setLayers(prevLayers => prevLayers.map(layer => 
       layer.id === layerId ? { ...layer, locked: newLockState } : layer
     ));
-    
-    toast(`Calque ${targetLayer.name} ${newLockState ? "verrouillé" : "déverrouillé"}`);
-  }, [layers]);
+  }, [layers, activeLayerId]);
 
   // Start editing a layer name
   const startEditLayerName = useCallback((layerId: string, currentName: string) => {
@@ -245,6 +249,18 @@ export const useLayerManager = () => {
     })));
   }, [activeLayerId, layers]);
 
+  // Expose an explicitly named method to check if a layer is locked or not
+  const isLayerLocked = useCallback((layerId: string) => {
+    const layer = layers.find(l => l.id === layerId);
+    return layer?.locked || false;
+  }, [layers]);
+
+  // Expose an explicitly named method to check if active layer is locked
+  const isActiveLayerLocked = useCallback(() => {
+    const activeLayer = layers.find(l => l.id === activeLayerId);
+    return activeLayer?.locked || false;
+  }, [layers, activeLayerId]);
+
   return {
     layers,
     setLayers,
@@ -262,6 +278,8 @@ export const useLayerManager = () => {
     setEditLayerName,
     updateLayerObjects,
     getLayerById,
-    getActiveLayer
+    getActiveLayer,
+    isLayerLocked,
+    isActiveLayerLocked
   };
 };
