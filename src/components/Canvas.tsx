@@ -26,6 +26,7 @@ interface CanvasProps {
   layers: Layer[];
   activeLayerId: string;
   setLayers: React.Dispatch<React.SetStateAction<Layer[]>>;
+  updateLayerObjects: (layerId: string, objects: any[]) => void; // Added this property
 }
 
 type HistoryAction = {
@@ -51,6 +52,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   layers,
   activeLayerId,
   setLayers,
+  updateLayerObjects,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
