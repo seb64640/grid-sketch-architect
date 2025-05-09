@@ -23,8 +23,7 @@ export const LayerActionButtons: React.FC<LayerActionButtonsProps> = ({
   onRemove,
   layerName
 }) => {
-  // Améliorons la gestion des événements pour éviter que les clics sur les boutons
-  // n'interfèrent avec les événements du canvas ou de sélection de calques
+  // Improved event handling to prevent interference with canvas or layer selection events
   const withStopPropagation = (handler: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -32,7 +31,7 @@ export const LayerActionButtons: React.FC<LayerActionButtonsProps> = ({
   };
 
   return (
-    <div className="ml-2 space-x-1 flex items-center" onClick={e => e.stopPropagation()}>
+    <div className="ml-2 space-x-1 flex items-center pointer-events-auto" onClick={e => e.stopPropagation()}>
       <button
         onClick={withStopPropagation(() => onEdit(layerId, layerName))}
         className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"

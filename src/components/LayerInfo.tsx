@@ -16,16 +16,16 @@ export const LayerInfo: React.FC<LayerInfoProps> = ({
   objectCount
 }) => {
   return (
-    <div className="flex items-center w-full pointer-events-auto">
+    <div className="flex items-center w-full pointer-events-none">
       {visible ?
-        <Eye className="h-4 w-4 mr-2 pointer-events-none" /> :
-        <EyeOff className="h-4 w-4 mr-2 text-gray-400 pointer-events-none" />
+        <Eye className="h-4 w-4 mr-2" /> :
+        <EyeOff className="h-4 w-4 mr-2 text-gray-400" />
       }
       {locked ?
-        <Lock className="h-4 w-4 mr-2 pointer-events-none" /> :
-        <Unlock className="h-4 w-4 mr-2 text-gray-400 pointer-events-none" />
+        <Lock className="h-4 w-4 mr-2" /> :
+        <Unlock className="h-4 w-4 mr-2 text-gray-400" />
       }
-      <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{name}</span>
+      <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap pointer-events-auto">{name}</span>
       <span className="ml-2 text-xs text-gray-400">
         ({objectCount || 0})
       </span>
