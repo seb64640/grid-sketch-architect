@@ -291,6 +291,7 @@ export const useLayerManager = () => {
     activeLayerId,
     setActiveLayerId,
     editingLayerId,
+    setEditingLayerId, // Explicitly exposing this function
     editLayerName,
     addLayer,
     removeLayer,
