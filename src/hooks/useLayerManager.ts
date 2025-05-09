@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
@@ -27,7 +28,7 @@ export const useLayerManager = () => {
   const [editLayerName, setEditLayerName] = useState("");
   
   // Reference to track if we're currently updating layers to avoid loops
-  const isUpdatingRef = useRef(false);
+  const isUpdatingRef = useRef<boolean>(false);
 
   // Helper function to generate unique layer name
   const generateUniqueLayerName = useCallback(() => {
@@ -183,7 +184,7 @@ export const useLayerManager = () => {
     setEditLayerName("");
   }, [editingLayerId, editLayerName, layers, generateUniqueLayerName]);
 
-  // Update layer objects with improved safety checks to prevent losing existing layers
+  // Nouvelle version améliorée pour update les objets d'un calque avec une meilleure gestion des erreurs
   const updateLayerObjects = useCallback((layerId: string, objects: any[]) => {
     // Avoid cascade updates
     if (isUpdatingRef.current) {
@@ -195,36 +196,55 @@ export const useLayerManager = () => {
     
     console.log(`Updating objects for layer ${layerId}, count: ${objects.length}`);
     
+    // Vérification de base pour les objets
+    if (!Array.isArray(objects)) {
+      console.error("updateLayerObjects called with non-array objects parameter");
+      isUpdatingRef.current = false;
+      return;
+    }
+    
+    // S'assurer que tous les objets sont définis et qu'ils ont un set ou sont de simples objets JSON
+    const validObjects = objects.filter(obj => obj !== null && obj !== undefined);
+    
+    if (validObjects.length !== objects.length) {
+      console.warn(`Filtered out ${objects.length - validObjects.length} invalid objects`);
+    }
+    
     setLayers(prevLayers => {
-      // Find the layer to update
-      const layerIndex = prevLayers.findIndex(layer => layer.id === layerId);
-      
-      // Si le calque n'existe pas, retournez l'état inchangé
-      if (layerIndex === -1) {
-        console.error(`Attempted to update objects for non-existent layer: ${layerId}`);
+      try {
+        // Find the layer to update
+        const layerIndex = prevLayers.findIndex(layer => layer.id === layerId);
+        
+        // Si le calque n'existe pas, retournez l'état inchangé
+        if (layerIndex === -1) {
+          console.error(`Attempted to update objects for non-existent layer: ${layerId}`);
+          return prevLayers;
+        }
+        
+        // Create a deep copy of the layers array
+        const updatedLayers = [...prevLayers];
+        
+        // Update objects of the specific layer - Utiliser une copie des objets pour éviter les références partagées
+        updatedLayers[layerIndex] = {
+          ...updatedLayers[layerIndex],
+          objects: [...validObjects]  // Utiliser les objets filtrés valides
+        };
+        
+        console.log(`Layer ${layerId} updated, objects count now: ${validObjects.length}`);
+        console.log(`Total layers after update: ${updatedLayers.length}`);
+        
+        // IMPORTANT: Return a new reference of the entire array
+        return updatedLayers;
+      } catch (error) {
+        console.error("Error in updateLayerObjects:", error);
         return prevLayers;
       }
-      
-      // Create a deep copy of the layers array
-      const updatedLayers = [...prevLayers];
-      
-      // Update objects of the specific layer
-      updatedLayers[layerIndex] = {
-        ...updatedLayers[layerIndex],
-        objects: [...objects]  // Copy objects to avoid shared references
-      };
-      
-      console.log(`Layer ${layerId} updated, objects count now: ${objects.length}`);
-      console.log(`Total layers after update: ${updatedLayers.length}`);
-      
-      // IMPORTANT: Return a new reference of the entire array
-      return updatedLayers;
     });
 
-    // Reset flag after update
+    // Reset flag after update, with a short timeout pour laisser le rendu se terminer
     setTimeout(() => {
       isUpdatingRef.current = false;
-    }, 0);
+    }, 50);
   }, []);
 
   // Get a specific layer by ID
@@ -283,3 +303,4 @@ export const useLayerManager = () => {
     isActiveLayerLocked
   };
 };
+

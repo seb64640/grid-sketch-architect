@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -80,6 +81,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   
   // Debug flag
   const debugMode = useRef<boolean>(true);
+  
+  // Référence pour suivre si les événements sont configurés
+  const eventsConfiguredRef = useRef<Set<string>>(new Set());
 
   // Gestion de l'état des objets actuellement en cours de dessin
   const [currentDrawingObjects, setCurrentDrawingObjects] = useState<{
@@ -134,6 +138,9 @@ export const Canvas: React.FC<CanvasProps> = ({
         if (canvasElement && canvasElement.parentNode) {
           canvasElement.parentNode.removeChild(canvasElement);
         }
+        
+        // Supprimer l'entrée de eventsConfigured pour ce calque
+        eventsConfiguredRef.current.delete(layerId);
       }
     });
     
@@ -187,6 +194,7 @@ export const Canvas: React.FC<CanvasProps> = ({
           backgroundColor: "transparent",
           renderOnAddRemove: true,
           preserveObjectStacking: true,
+          isDrawingMode: layer.id === activeLayerId && activeTool === "draw" && !layer.locked,
         });
         
         // Stocker les références
@@ -247,6 +255,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
       
       canvas.selection = false;
+      // Réinitialiser aussi l'indicateur d'événements configurés
+      eventsConfiguredRef.current.delete(layerId);
     });
     
     const activeFabricCanvas = fabricCanvasesRef.current.get(activeLayerId);
@@ -287,6 +297,13 @@ export const Canvas: React.FC<CanvasProps> = ({
       const canvasElement = layerCanvasRefs.current.get(layer.id);
       if (canvasElement) {
         canvasElement.style.display = layer.visible ? 'block' : 'none';
+        
+        // Force aussi la mise à jour des pointer-events pour s'assurer qu'ils sont correctement configurés
+        if (layer.id === activeLayerId) {
+          canvasElement.style.pointerEvents = layer.locked ? 'none' : 'auto';
+        } else {
+          canvasElement.style.pointerEvents = 'none';
+        }
       }
     });
     
@@ -373,6 +390,16 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.off('mouse:down');
       canvas.off('mouse:move');
       canvas.off('mouse:up');
+      
+      // Marquer comme configuré même s'il est verrouillé
+      eventsConfiguredRef.current.add(layerId);
+      return;
+    }
+    
+    // Vérifier si les événements sont déjà configurés pour ce calque et cet outil
+    const eventKey = `${layerId}-${activeTool}`;
+    if (eventsConfiguredRef.current.has(eventKey)) {
+      console.log(`Events already configured for ${layerId} with tool ${activeTool}`);
       return;
     }
     
@@ -462,6 +489,9 @@ export const Canvas: React.FC<CanvasProps> = ({
         });
       }
     }
+    
+    // Marquer les événements comme configurés pour ce calque et cet outil
+    eventsConfiguredRef.current.add(eventKey);
     
     // Log des événements configurés
     console.log(`Events set up for layer ${layerId} with tool ${activeTool}`);
@@ -795,9 +825,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         console.log("Line tool: Finished drawing line");
         
-        // Mettre à jour la liste d'objets du calque
+        // Mettre à jour la liste d'objets du calque - IMPORTANT POUR LA PERSISTANCE
         const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
         updateLayerObjects(layerId, layerObjects);
+        
+        // Ajouter l'action à l'historique
+        saveHistoryState([line], 'add', layerId);
       }
       
       startPointRef.current = null;
@@ -916,9 +949,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         console.log("Circle tool: Finished drawing circle");
         
-        // Mettre à jour la liste d'objets du calque
+        // Mettre à jour la liste d'objets du calque - IMPORTANT POUR LA PERSISTANCE
         const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
         updateLayerObjects(layerId, layerObjects);
+        
+        // Ajouter l'action à l'historique
+        saveHistoryState([circle], 'add', layerId);
       }
       
       startPointRef.current = null;
@@ -1036,9 +1072,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         console.log("Rectangle tool: Finished drawing rectangle");
         
-        // Mettre à jour la liste d'objets du calque
+        // Mettre à jour la liste d'objets du calque - IMPORTANT POUR LA PERSISTANCE
         const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
         updateLayerObjects(layerId, layerObjects);
+        
+        // Ajouter l'action à l'historique
+        saveHistoryState([rect], 'add', layerId);
       }
       
       startPointRef.current = null;
@@ -1081,14 +1120,23 @@ export const Canvas: React.FC<CanvasProps> = ({
       
       canvas.add(text);
       canvas.setActiveObject(text);
-      text.enterEditing();
-      text.selectAll();
+      
+      // Activer l'édition avec un délai pour éviter les problèmes
+      setTimeout(() => {
+        if (text) {
+          text.enterEditing();
+          text.selectAll();
+        }
+      }, 100);
       
       console.log("Text tool: Added text object");
       
-      // Mettre à jour la liste d'objets du calque
+      // Mettre à jour la liste d'objets du calque - IMPORTANT POUR LA PERSISTANCE
       const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
       updateLayerObjects(layerId, layerObjects);
+      
+      // Ajouter l'action à l'historique
+      saveHistoryState([text], 'add', layerId);
       
       canvas.requestRenderAll();
     });
@@ -1134,12 +1182,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Supprimer l'objet
         canvas.remove(objectToRemove);
         
-        // Mettre à jour la liste d'objets du calque
+        // Mettre à jour la liste d'objets du calque - IMPORTANT POUR LA PERSISTANCE
         const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
         updateLayerObjects(layerId, layerObjects);
         
         canvas.requestRenderAll();
-        toast("Objet supprim��");
+        toast("Objet supprimé");
       }
     });
   };
@@ -1343,9 +1391,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         console.log("Arrow tool: Finished drawing arrow");
         
-        // Mettre à jour la liste d'objets du calque
+        // Mettre à jour la liste d'objets du calque - IMPORTANT POUR LA PERSISTANCE
         const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
         updateLayerObjects(layerId, layerObjects);
+        
+        // Ajouter l'action à l'historique
+        saveHistoryState([arrowGroup], 'add', layerId);
         
         toast("Flèche ajoutée");
       }
@@ -1381,3 +1432,4 @@ export const Canvas: React.FC<CanvasProps> = ({
     </div>
   );
 };
+
