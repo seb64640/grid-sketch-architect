@@ -84,6 +84,7 @@ export const GridSketch = () => {
     const newLayerId = `layer-${Date.now()}`; // Using timestamp to ensure unique IDs
     const newLayerName = generateUniqueLayerName();
     
+    // Create a new layer without changing visibility of existing layers
     const newLayer: Layer = {
       id: newLayerId,
       name: newLayerName,
@@ -92,7 +93,8 @@ export const GridSketch = () => {
       objects: [] // Initialize with empty objects array
     };
     
-    setLayers([...layers, newLayer]);
+    // Preserve all existing layers with their current visibility state
+    setLayers(prevLayers => [...prevLayers, newLayer]);
     setActiveLayerId(newLayerId);
     toast(`Nouveau calque: ${newLayer.name}`);
   };
@@ -292,6 +294,12 @@ export const GridSketch = () => {
     setIsPrintMode(!isPrintMode);
     toast(isPrintMode ? "Mode éditeur" : "Mode impression");
   };
+
+  // Log layer changes when the active layer changes (for debugging)
+  useEffect(() => {
+    console.log("Active layer changed to:", activeLayerId);
+    console.log("Current layers:", layers);
+  }, [activeLayerId, layers]);
 
   return (
     <div className="flex flex-col h-full">
