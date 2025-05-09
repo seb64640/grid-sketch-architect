@@ -1,8 +1,9 @@
+
 import React from 'react';
 import { Layer } from '../hooks/useLayerManager';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { Input } from "./ui/input";
-import { Layers, Eye, EyeOff, Lock, Unlock, Edit, Check, Trash } from "lucide-react";
+import { Layers } from "lucide-react";
+import { LayerItem } from './LayerItem';
 
 interface LayerManagerProps {
   layers: Layer[];
@@ -39,14 +40,9 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
     e.preventDefault();
     e.stopPropagation();
     if (process.env.NODE_ENV === 'development') {
-      console.log("Ajout d’un nouveau calque depuis l’interface");
+      console.log("Ajout d'un nouveau calque depuis l'interface");
     }
     addLayer();
-  };
-
-  const withStopPropagation = (handler: () => void) => (e: React.MouseEvent) => {
-    e.stopPropagation();
-    handler();
   };
 
   const activeLayer = layers.find(layer => layer.id === activeLayerId);
@@ -68,97 +64,24 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
               <DropdownMenuItem disabled>Aucun calque disponible</DropdownMenuItem>
             ) : (
               layers.map((layer) => (
-                <DropdownMenuItem
+                <LayerItem
                   key={layer.id}
-                  className={`flex items-center justify-between p-2 ${layer.id === activeLayerId ? 'bg-accent font-bold border-l-4 border-primary' : ''}`}
-                  onClick={() => {
-                    if (layer.id !== editingLayerId) {
-                      if (process.env.NODE_ENV === 'development') {
-                        console.log(`Définition du calque actif : ${layer.id} (${layer.name})`);
-                      }
-                      setActiveLayerId(layer.id);
-                    }
+                  layer={layer}
+                  isActive={layer.id === activeLayerId}
+                  isEditing={layer.id === editingLayerId}
+                  editLayerName={editLayerName}
+                  onLayerSelect={setActiveLayerId}
+                  onSaveLayerName={saveLayerName}
+                  onEditLayerName={setEditLayerName}
+                  onCancelEdit={() => {
+                    setEditLayerName("");
+                    setEditingLayerId(null);
                   }}
-                >
-                  {editingLayerId === layer.id ? (
-                    <div className="flex items-center space-x-2 w-full">
-                      <Input
-                        value={editLayerName}
-                        onChange={(e) => setEditLayerName(e.target.value)}
-                        className="h-8 w-full"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            saveLayerName();
-                          } else if (e.key === 'Escape') {
-                            setEditLayerName("");
-                            setEditingLayerId(null);
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label="Nom du calque"
-                      />
-                      <button
-                        onClick={withStopPropagation(saveLayerName)}
-                        className="p-1 rounded-full hover:bg-gray-100"
-                        aria-label="Valider le nom du calque"
-                      >
-                        <Check className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center">
-                        {layer.visible ?
-                          <Eye className="h-4 w-4 mr-2" /> :
-                          <EyeOff className="h-4 w-4 mr-2 text-gray-400" />
-                        }
-                        {layer.locked ?
-                          <Lock className="h-4 w-4 mr-2" /> :
-                          <Unlock className="h-4 w-4 mr-2 text-gray-400" />
-                        }
-                        <span>{layer.name}</span>
-                        <span className="ml-2 text-xs text-gray-400">
-                          ({layer.objects?.length || 0})
-                        </span>
-                      </div>
-                      <div className="ml-2 space-x-1">
-                        <button
-                          onClick={withStopPropagation(() => startEditLayerName(layer.id, layer.name))}
-                          className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
-                          title="Renommer"
-                          aria-label="Renommer le calque"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={withStopPropagation(() => toggleLayerVisibility(layer.id))}
-                          className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
-                          title={layer.visible ? 'Masquer' : 'Afficher'}
-                          aria-label={layer.visible ? 'Masquer le calque' : 'Afficher le calque'}
-                        >
-                          {layer.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                        </button>
-                        <button
-                          onClick={withStopPropagation(() => toggleLayerLock(layer.id))}
-                          className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
-                          title={layer.locked ? 'Déverrouiller' : 'Verrouiller'}
-                          aria-label={layer.locked ? 'Déverrouiller le calque' : 'Verrouiller le calque'}
-                        >
-                          {layer.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-                        </button>
-                        <button
-                          onClick={withStopPropagation(() => removeLayer(layer.id))}
-                          className="text-xs text-red-500 px-1 py-0.5 hover:bg-red-50 rounded"
-                          title="Supprimer"
-                          aria-label="Supprimer le calque"
-                        >
-                          <Trash className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </DropdownMenuItem>
+                  startEditLayerName={startEditLayerName}
+                  toggleLayerVisibility={toggleLayerVisibility}
+                  toggleLayerLock={toggleLayerLock}
+                  removeLayer={removeLayer}
+                />
               ))
             )}
             <DropdownMenuItem onClick={handleAddLayer} className="text-green-600 p-2">
