@@ -73,7 +73,7 @@ export const Canvas: React.FC<CanvasProps> = ({
   const isLayerUpdateInProgress = useRef<boolean>(false);
   
   // Debug flag
-  const debugMode = useRef<boolean>(false);
+  const debugMode = useRef<boolean>(true);
 
   // Initialize fabric canvas
   useEffect(() => {
@@ -94,11 +94,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (layers && layers.length > 0) {
       console.log(`Initializing layers map with ${layers.length} layers`);
       layers.forEach(layer => {
-        if (!layerObjectsMap.current.has(layer.id)) {
-          layerObjectsMap.current.set(layer.id, []);
-          if (debugMode.current) {
-            console.log(`Added layer to map: ${layer.id} (${layer.name})`);
-          }
+        layerObjectsMap.current.set(layer.id, []);
+        if (debugMode.current) {
+          console.log(`Added layer to map: ${layer.id} (${layer.name})`);
         }
       });
     }
@@ -184,13 +182,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         layerObjectsMap.current.set(activeLayerId, layerObjects);
         
         // Add custom property to the object to track its layer
-        e.target.toObject = (function(toObject) {
-          return function(propertiesToInclude) {
-            return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
-              layerId: activeLayerId
-            });
-          };
-        })(e.target.toObject);
+        e.target.set('layerId', activeLayerId);
         
         if (debugMode.current) {
           console.log(`Added object to layer ${activeLayerId}, total objects in layer: ${layerObjects.length}`);
@@ -314,35 +306,57 @@ export const Canvas: React.FC<CanvasProps> = ({
     }, 0);
   };
 
-  // Effect to handle layer changes and visibility
-  useEffect(() => {
+  // Update canvas objects visibility based on layer settings
+  const updateLayersVisibility = () => {
     if (!fabricCanvasRef.current) return;
-    
     const canvas = fabricCanvasRef.current;
-    console.log("Layer update effect triggered. Active layer:", activeLayerId);
     
-    // Update objects visibility based on layer settings
-    for (const layer of layers) {
-      const layerObjects = layerObjectsMap.current.get(layer.id) || [];
+    // Hide all objects first
+    canvas.getObjects().forEach(obj => {
+      // Skip grid
+      if (gridRef.current && (gridRef.current === obj || (gridRef.current.contains && gridRef.current.contains(obj)))) {
+        return;
+      }
       
-      for (const obj of layerObjects) {
-        // Objects should be visible if their layer is visible
-        if (obj && obj.visible !== undefined) {
+      // Skip temp points
+      if (tempPointRef.current === obj) {
+        return;
+      }
+      
+      // Get the layer ID from the object
+      const objLayerId = obj.get('layerId');
+      
+      if (objLayerId) {
+        // Find the layer
+        const layer = layers.find(l => l.id === objLayerId);
+        
+        if (layer) {
+          // Set visibility based on layer visibility
           obj.visible = layer.visible;
           
-          // Objects should be selectable and evented only if they are on the active layer and not locked
-          const isActive = layer.id === activeLayerId;
+          // Set interactivity based on active layer and locked status
+          const isActive = objLayerId === activeLayerId;
           obj.selectable = isActive && !layer.locked && activeTool === "select";
           obj.evented = isActive && !layer.locked;
           
           if (debugMode.current) {
-            console.log(`Updated object in layer ${layer.id}: visible=${obj.visible}, selectable=${obj.selectable}`);
+            console.log(`Object visibility updated: layerId=${objLayerId}, visible=${obj.visible}, selectable=${obj.selectable}`);
           }
         }
       }
-    }
+    });
     
     canvas.requestRenderAll();
+  };
+
+  // Effect to handle layer changes and visibility
+  useEffect(() => {
+    if (!fabricCanvasRef.current) return;
+    
+    console.log("Layer update effect triggered. Active layer:", activeLayerId);
+    
+    updateLayersVisibility();
+    
   }, [layers, activeLayerId, activeTool]);
 
   // Save the current state to history
@@ -640,30 +654,24 @@ export const Canvas: React.FC<CanvasProps> = ({
         return;
       }
       
-      // Find which layer this object belongs to
-      let objectLayerId: string | null = null;
+      // Get the layer this object belongs to
+      const objLayerId = obj.get('layerId');
       
-      for (const [layerId, objects] of layerObjectsMap.current.entries()) {
-        if (objects.includes(obj)) {
-          objectLayerId = layerId;
-          break;
-        }
-      }
-      
-      // If object is found in a layer
-      if (objectLayerId) {
-        const layer = layers.find(l => l.id === objectLayerId);
+      if (objLayerId) {
+        const layer = layers.find(l => l.id === objLayerId);
         
-        // Apply layer visibility
+        // Apply layer visibility and interactivity
         if (layer) {
-          // Set visibility based on layer visibility 
-          // without removing from canvas
           obj.visible = layer.visible;
           
           // Apply layer lock and interactivity
-          const isActive = objectLayerId === activeLayerId;
+          const isActive = objLayerId === activeLayerId;
           obj.selectable = isActive && !layer.locked && !isDrawingTool;
           obj.evented = isActive && !layer.locked;
+          
+          if (debugMode.current) {
+            console.log(`Object interactivity updated: layerId=${objLayerId}, visible=${obj.visible}, selectable=${obj.selectable}`);
+          }
         }
       } else {
         // Default behavior for objects not assigned to layers
@@ -846,33 +854,23 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Now make the line selectable for future interactions
         line.set({
           selectable: true,
-          evented: true
+          evented: true,
+          layerId: activeLayerId // Set layer ID directly on the object
         });
-        
-        // Add the object to the active layer
-        const lineObj = line;
+
+        // Add object to layer map
         const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
-        
-        if (!layerObjects.includes(lineObj)) {
-          layerObjects.push(lineObj);
+        if (!layerObjects.includes(line)) {
+          layerObjects.push(line);
           layerObjectsMap.current.set(activeLayerId, layerObjects);
-          
-          // Add custom layerId property
-          lineObj.toObject = (function(toObject) {
-            return function(propertiesToInclude) {
-              return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
-                layerId: activeLayerId
-              });
-            };
-          })(lineObj.toObject);
           
           if (debugMode.current) {
             console.log(`Added line to layer ${activeLayerId}, total: ${layerObjects.length}`);
           }
+          
+          // Update layers state with new objects
+          updateLayersWithObjects();
         }
-        
-        // Update layers state
-        updateLayersWithObjects();
       }
       
       startPointRef.current = null;
@@ -978,33 +976,24 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Now make the circle selectable for future interactions
         circle.set({
           selectable: true,
-          evented: true
+          evented: true,
+          layerId: activeLayerId // Set layer ID directly
         });
         
         // Add the object to the active layer
-        const circleObj = circle;
         const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
         
-        if (!layerObjects.includes(circleObj)) {
-          layerObjects.push(circleObj);
+        if (!layerObjects.includes(circle)) {
+          layerObjects.push(circle);
           layerObjectsMap.current.set(activeLayerId, layerObjects);
-          
-          // Add custom layerId property
-          circleObj.toObject = (function(toObject) {
-            return function(propertiesToInclude) {
-              return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
-                layerId: activeLayerId
-              });
-            };
-          })(circleObj.toObject);
           
           if (debugMode.current) {
             console.log(`Added circle to layer ${activeLayerId}, total: ${layerObjects.length}`);
           }
+          
+          // Update layers state with new objects
+          updateLayersWithObjects();
         }
-        
-        // Update layers state
-        updateLayersWithObjects();
       }
       
       startPointRef.current = null;
@@ -1109,33 +1098,24 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Now make the rectangle selectable for future interactions
         rect.set({
           selectable: true,
-          evented: true
+          evented: true,
+          layerId: activeLayerId // Set layer ID directly
         });
         
         // Add the object to the active layer
-        const rectObj = rect;
         const layerObjects = layerObjectsMap.current.get(activeLayerId) || [];
         
-        if (!layerObjects.includes(rectObj)) {
-          layerObjects.push(rectObj);
+        if (!layerObjects.includes(rect)) {
+          layerObjects.push(rect);
           layerObjectsMap.current.set(activeLayerId, layerObjects);
-          
-          // Add custom layerId property
-          rectObj.toObject = (function(toObject) {
-            return function(propertiesToInclude) {
-              return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
-                layerId: activeLayerId
-              });
-            };
-          })(rectObj.toObject);
           
           if (debugMode.current) {
             console.log(`Added rectangle to layer ${activeLayerId}, total: ${layerObjects.length}`);
           }
+          
+          // Update layers state with new objects
+          updateLayersWithObjects();
         }
-        
-        // Update layers state
-        updateLayersWithObjects();
       }
       
       startPointRef.current = null;
@@ -1173,16 +1153,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         fill: strokeColor,
         selectable: true,
         editable: true,
+        layerId: activeLayerId // Set layer ID directly
       });
-      
-      // Add custom layerId property
-      text.toObject = (function(toObject) {
-        return function(propertiesToInclude) {
-          return fabric.util.object.extend(toObject.call(this, propertiesToInclude), {
-            layerId: activeLayerId
-          });
-        };
-      })(text.toObject);
       
       canvas.add(text);
       canvas.setActiveObject(text);
@@ -1207,7 +1179,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
   };
 
-  // Erase tool setup - Improved to work with whole shapes
+  // Erase tool setup
   const setupEraseTool = (canvas: fabric.Canvas) => {
     canvas.on("mouse:down", (o) => {
       const pointer = canvas.getPointer(o.e);
@@ -1221,7 +1193,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         const obj = objects[i];
         
         // Skip grid
-        if (gridRef.current === obj || (gridRef.current && gridRef.current.contains && gridRef.current.contains(obj))) {
+        if (gridRef.current && (gridRef.current === obj || (gridRef.current.contains && gridRef.current.contains(obj)))) {
           continue;
         }
         
@@ -1232,22 +1204,16 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         // Check if object contains the clicked point or if it's close to a line or shape
         if (isPointInOrNearObject(obj, pointer)) {
+          // Get the layer ID of this object
+          const objLayerId = obj.get('layerId');
+          
           // Check if object belongs to a locked layer
-          let isLocked = false;
-          let objectLayerId: string | null = null;
-          
-          for (const [layerId, objects] of layerObjectsMap.current.entries()) {
-            if (objects.includes(obj)) {
-              objectLayerId = layerId;
-              const layer = layers.find(l => l.id === layerId);
-              isLocked = layer?.locked || false;
-              break;
+          if (objLayerId) {
+            const layer = layers.find(l => l.id === objLayerId);
+            if (layer && layer.locked) {
+              toast.error("Cet objet est sur un calque verrouillé");
+              continue;
             }
-          }
-          
-          if (isLocked) {
-            toast.error("Cet objet est sur un calque verrouillé");
-            continue;
           }
           
           objectToRemove = obj;
@@ -1256,25 +1222,29 @@ export const Canvas: React.FC<CanvasProps> = ({
       }
       
       if (objectToRemove) {
-        // Find which layer the object belongs to
-        for (const [layerId, objects] of layerObjectsMap.current.entries()) {
-          const index = objects.indexOf(objectToRemove);
+        // Get the layer ID of the object
+        const objLayerId = objectToRemove.get('layerId');
+        
+        if (objLayerId) {
+          // Get the layer objects
+          const layerObjects = layerObjectsMap.current.get(objLayerId) || [];
+          const index = layerObjects.indexOf(objectToRemove);
+          
           if (index >= 0) {
             // Save state before removing
-            saveHistoryState([objectToRemove], 'remove', layerId);
+            saveHistoryState([objectToRemove], 'remove', objLayerId);
             
             // Remove from canvas
             canvas.remove(objectToRemove);
             
             // Remove from layer objects map
-            objects.splice(index, 1);
+            layerObjects.splice(index, 1);
             
-            // Update layers state - CORRECTION
+            // Update layers state
             updateLayersWithObjects();
             
             canvas.requestRenderAll();
             toast("Objet supprimé");
-            break;
           }
         }
       }
@@ -1345,7 +1315,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     return false;
   };
   
-  // New Arrow tool setup for free placement
+  // Arrow tool setup
   const setupArrowTool = (canvas: fabric.Canvas) => {
     let arrowLine: fabric.Line | null = null;
     
@@ -1464,16 +1434,17 @@ export const Canvas: React.FC<CanvasProps> = ({
         const arrowGroup = new fabric.Group([arrowLine, arrowHead], {
           selectable: true,
           evented: true,
+          layerId: activeLayerId // Set layer ID directly
         });
         
         // Remove the individual objects and add the group
         canvas.remove(arrowLine, arrowHead);
         canvas.add(arrowGroup);
         
-        // Pas besoin d'ajouter à la liste du calque ici, c'est géré par l'événement 'object:added'
-        console.log(`Flèche créée sur le calque actif: ${activeLayerId}`);
-        
-        // No need to save to history here, will be handled by object:added event
+        // Add to layer - the object:added event will handle this
+        if (debugMode.current) {
+          console.log(`Arrow created on active layer: ${activeLayerId}`);
+        }
         
         toast("Flèche ajoutée");
       }

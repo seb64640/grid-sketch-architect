@@ -292,7 +292,7 @@ export const GridSketch = () => {
                 <Layers className="mr-2 h-4 w-4" />
                 <span>{layers.find(layer => layer.id === activeLayerId)?.name || "Calque"}</span>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="min-w-[280px] bg-white">
+              <DropdownMenuContent className="min-w-[280px] bg-white z-50">
                 {layers.map((layer) => (
                   <DropdownMenuItem
                     key={layer.id}
