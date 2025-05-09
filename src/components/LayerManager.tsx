@@ -34,6 +34,13 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
   saveLayerName,
   setEditLayerName
 }) => {
+  const handleAddLayer = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log("Adding new layer");
+    addLayer();
+  };
+
   return (
     <div className="mb-2 flex justify-between items-center">
       <div className="flex items-center space-x-2">
@@ -88,6 +95,9 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
                         <Unlock className="h-4 w-4 mr-2 text-gray-400" />
                       }
                       <span>{layer.name}</span>
+                      <span className="ml-2 text-xs text-gray-400">
+                        ({layer.objects?.length || 0})
+                      </span>
                     </div>
                     <div className="ml-2 space-x-1">
                       <button 
@@ -135,7 +145,7 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
                 )}
               </DropdownMenuItem>
             ))}
-            <DropdownMenuItem onClick={addLayer} className="text-green-600 p-2">
+            <DropdownMenuItem onClick={handleAddLayer} className="text-green-600 p-2">
               + Nouveau calque
             </DropdownMenuItem>
           </DropdownMenuContent>

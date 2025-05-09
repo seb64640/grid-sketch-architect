@@ -127,6 +127,19 @@ export const GridSketch = () => {
     toast(isPrintMode ? "Mode éditeur" : "Mode impression");
   };
 
+  // Log whenever layers change
+  useEffect(() => {
+    console.log("Layer update effect triggered. Active layer:", layerManager.activeLayerId);
+    console.log("Layers state in GridSketch:", 
+      layerManager.layers.map(l => ({
+        id: l.id,
+        name: l.name,
+        objectCount: l.objects?.length || 0,
+        visible: l.visible
+      }))
+    );
+  }, [layerManager.layers, layerManager.activeLayerId]);
+
   return (
     <div className="flex flex-col h-full">
       <ToolBar
@@ -183,6 +196,7 @@ export const GridSketch = () => {
           layers={layerManager.layers}
           activeLayerId={layerManager.activeLayerId}
           setLayers={layerManager.setLayers}
+          updateLayerObjects={layerManager.updateLayerObjects} 
         />
       </div>
     </div>
