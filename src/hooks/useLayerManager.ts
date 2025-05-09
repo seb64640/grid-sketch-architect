@@ -56,24 +56,14 @@ export const useLayerManager = () => {
       objects: [] // Initialize with empty objects array
     };
     
-    // FIXED: Ensure we properly preserve all existing layer objects by using functional update
+    // CRITICAL FIX: DO NOT create new object references for existing layer objects
     setLayers(prevLayers => {
-      // Log for debugging
-      console.log("Adding new layer. Current layers:", JSON.stringify(prevLayers.map(l => ({
-        id: l.id,
-        name: l.name,
-        objectCount: l.objects?.length || 0
-      }))));
-      
-      // Create a deep copy of the previous layers to ensure objects references are preserved
-      const updatedLayers = prevLayers.map(layer => ({...layer, objects: [...(layer.objects || [])]}));
-      
-      // Add the new layer to the array
-      return [...updatedLayers, newLayer];
+      // Important: Just create a new array with all previous layers as is (not deep copied)
+      // plus the new layer - this preserves all object references
+      return [...prevLayers, newLayer];
     });
     
     // Update active layer ID AFTER setting layers to ensure the state is updated correctly
-    // Use setTimeout to ensure this happens after the layer state is updated
     setTimeout(() => {
       setActiveLayerId(newLayerId);
       console.log("Active layer changed to:", newLayerId);
