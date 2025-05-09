@@ -93,14 +93,26 @@ export const GridSketch = () => {
       objects: [] // Initialize with empty objects array
     };
     
-    // Important: We keep all existing layers with their current state and objects
-    // Use the functional form of setState to ensure we're working with the most recent state
+    // Important: We need to preserve the exact objects references in the existing layers
+    // The issue is that the Canvas component might be mutating these objects directly
     setLayers(prevLayers => {
-      console.log("Adding new layer, preserving existing layers:", prevLayers);
+      // Deep log of the layer content to debug
+      console.log("Adding new layer. Current layers objects count:", prevLayers.map(l => ({
+        id: l.id,
+        name: l.name,
+        objectCount: l.objects?.length || 0
+      })));
+      
+      // We need to create a new array but keep the existing layer objects references intact
       return [...prevLayers, newLayer];
     });
     
-    setActiveLayerId(newLayerId);
+    // Update the active layer id AFTER setting layers to ensure the state is updated correctly
+    setTimeout(() => {
+      setActiveLayerId(newLayerId);
+      console.log("Active layer changed to:", newLayerId);
+    }, 10);
+    
     toast(`Nouveau calque: ${newLayer.name}`);
   };
 
@@ -123,33 +135,35 @@ export const GridSketch = () => {
   };
 
   const toggleLayerVisibility = (layerId: string) => {
-    const updatedLayers = layers.map(layer => {
+    setLayers(prevLayers => prevLayers.map(layer => {
       if (layer.id === layerId) {
+        const newVisibility = !layer.visible;
+        console.log(`Toggling visibility for layer ${layer.name} (${layer.id}) to ${newVisibility}`);
         return {
           ...layer,
-          visible: !layer.visible
+          visible: newVisibility
         };
       }
       return layer;
-    });
+    }));
     
-    setLayers(updatedLayers);
     const targetLayer = layers.find(layer => layer.id === layerId);
     toast(`Calque ${targetLayer?.name} ${targetLayer?.visible ? "masqué" : "visible"}`);
   };
 
   const toggleLayerLock = (layerId: string) => {
-    const updatedLayers = layers.map(layer => {
+    setLayers(prevLayers => prevLayers.map(layer => {
       if (layer.id === layerId) {
+        const newLockState = !layer.locked;
+        console.log(`Toggling lock for layer ${layer.name} (${layer.id}) to ${newLockState}`);
         return {
           ...layer,
-          locked: !layer.locked
+          locked: newLockState
         };
       }
       return layer;
-    });
+    }));
     
-    setLayers(updatedLayers);
     const targetLayer = layers.find(layer => layer.id === layerId);
     toast(`Calque ${targetLayer?.name} ${targetLayer?.locked ? "déverrouillé" : "verrouillé"}`);
   };
@@ -189,7 +203,7 @@ export const GridSketch = () => {
   };
 
   const renameLayer = (layerId: string, newName: string) => {
-    const updatedLayers = layers.map(layer => {
+    setLayers(prevLayers => prevLayers.map(layer => {
       if (layer.id === layerId) {
         return {
           ...layer,
@@ -197,9 +211,8 @@ export const GridSketch = () => {
         };
       }
       return layer;
-    });
+    }));
     
-    setLayers(updatedLayers);
     toast(`Calque renommé en: ${newName}`);
   };
 
@@ -305,6 +318,19 @@ export const GridSketch = () => {
     console.log("Active layer changed to:", activeLayerId);
     console.log("Current layers:", layers);
   }, [activeLayerId, layers]);
+
+  // Add a useEffect to track layer object changes
+  useEffect(() => {
+    console.log("Layers state updated - objects per layer:",
+      layers.map(layer => ({
+        id: layer.id, 
+        name: layer.name,
+        objectCount: layer.objects?.length || 0,
+        visible: layer.visible,
+        locked: layer.locked
+      }))
+    );
+  }, [layers]);
 
   return (
     <div className="flex flex-col h-full">
