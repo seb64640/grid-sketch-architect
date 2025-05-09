@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
@@ -176,7 +177,7 @@ export const GridSketch = () => {
           startEditLayerName={layerManager.startEditLayerName}
           saveLayerName={layerManager.saveLayerName}
           setEditLayerName={layerManager.setEditLayerName}
-          setEditingLayerId={layerManager.setEditingLayerId} // Added this prop
+          setEditingLayerId={layerManager.setEditingLayerId}
         />
 
         <Canvas

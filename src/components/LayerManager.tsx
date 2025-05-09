@@ -18,7 +18,7 @@ interface LayerManagerProps {
   startEditLayerName: (id: string, currentName: string) => void;
   saveLayerName: () => void;
   setEditLayerName: (name: string) => void;
-  setEditingLayerId: (id: string | null) => void; // Added this missing prop
+  setEditingLayerId: (id: string | null) => void;
 }
 
 export const LayerManager: React.FC<LayerManagerProps> = ({
@@ -34,7 +34,7 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
   startEditLayerName,
   saveLayerName,
   setEditLayerName,
-  setEditingLayerId // Added this to the destructuring
+  setEditingLayerId
 }) => {
   const handleAddLayer = (e: React.MouseEvent) => {
     e.preventDefault();
