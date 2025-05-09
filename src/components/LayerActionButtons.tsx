@@ -29,7 +29,7 @@ export const LayerActionButtons: React.FC<LayerActionButtonsProps> = ({
   };
 
   return (
-    <div className="ml-2 space-x-1">
+    <div className="ml-2 space-x-1 flex items-center">
       <button
         onClick={withStopPropagation(() => onEdit(layerId, layerName))}
         className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"

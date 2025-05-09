@@ -179,9 +179,9 @@ export const useLayerManager = () => {
     setEditLayerName("");
   }, [editingLayerId, editLayerName, layers, generateUniqueLayerName]);
 
-  // Update layer objects with safety checks - SIMPLIFIÉE ET CORRIGÉE
+  // Update layer objects with improved safety checks to prevent losing existing layers
   const updateLayerObjects = useCallback((layerId: string, objects: any[]) => {
-    // Évite les mises à jour en cascade
+    // Avoid cascade updates
     if (isUpdatingRef.current) {
       console.log("Skipping recursive updateLayerObjects call");
       return;
@@ -192,7 +192,7 @@ export const useLayerManager = () => {
     console.log(`Updating objects for layer ${layerId}, count: ${objects.length}`);
     
     setLayers(prevLayers => {
-      // Trouvez le calque à mettre à jour
+      // Find the layer to update
       const layerIndex = prevLayers.findIndex(layer => layer.id === layerId);
       
       // Si le calque n'existe pas, retournez l'état inchangé
@@ -201,23 +201,23 @@ export const useLayerManager = () => {
         return prevLayers;
       }
       
-      // Créez une copie profonde du tableau de calques
+      // Create a deep copy of the layers array
       const updatedLayers = [...prevLayers];
       
-      // Mettez à jour les objets du calque spécifique
+      // Update objects of the specific layer
       updatedLayers[layerIndex] = {
         ...updatedLayers[layerIndex],
-        objects: [...objects]  // Copie des objets pour éviter des références partagées
+        objects: [...objects]  // Copy objects to avoid shared references
       };
       
       console.log(`Layer ${layerId} updated, objects count now: ${objects.length}`);
       console.log(`Total layers after update: ${updatedLayers.length}`);
       
-      // IMPORTANT: Nous retournons une nouvelle référence du tableau entier
+      // IMPORTANT: Return a new reference of the entire array
       return updatedLayers;
     });
 
-    // Réinitialiser le drapeau après la mise à jour
+    // Reset flag after update
     setTimeout(() => {
       isUpdatingRef.current = false;
     }, 0);
