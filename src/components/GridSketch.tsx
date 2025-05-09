@@ -4,7 +4,7 @@ import { Canvas } from "./Canvas";
 import { ToolBar, Tool } from "./ToolBar";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { Layers, Eye, EyeOff, Lock, Unlock, Edit, Check } from "lucide-react";
+import { Layers, Eye, EyeOff, Lock, Unlock, Edit, Check, Trash } from "lucide-react";
 import { Input } from "./ui/input";
 
 export interface Layer {
@@ -377,7 +377,7 @@ export const GridSketch = () => {
                             className="text-xs text-red-500 px-1 py-0.5 hover:bg-red-50 rounded"
                             title="Supprimer"
                           >
-                            <trash className="h-4 w-4" />
+                            <Trash className="h-4 w-4" />
                           </button>
                         </div>
                       </>
