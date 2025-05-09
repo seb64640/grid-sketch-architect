@@ -1,3 +1,4 @@
+
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 
@@ -55,20 +56,24 @@ export const useLayerManager = () => {
       objects: [] // Initialize with empty objects array
     };
     
-    // Important: We need to preserve the exact objects references in the existing layers
+    // FIXED: Ensure we properly preserve all existing layer objects by using functional update
     setLayers(prevLayers => {
-      // Deep log of the layer content to debug
-      console.log("Adding new layer. Current layers objects count:", prevLayers.map(l => ({
+      // Log for debugging
+      console.log("Adding new layer. Current layers:", JSON.stringify(prevLayers.map(l => ({
         id: l.id,
         name: l.name,
         objectCount: l.objects?.length || 0
-      })));
+      }))));
       
-      // We need to create a new array but keep the existing layer objects references intact
-      return [...prevLayers, newLayer];
+      // Create a deep copy of the previous layers to ensure objects references are preserved
+      const updatedLayers = prevLayers.map(layer => ({...layer, objects: [...(layer.objects || [])]}));
+      
+      // Add the new layer to the array
+      return [...updatedLayers, newLayer];
     });
     
-    // Update the active layer id AFTER setting layers to ensure the state is updated correctly
+    // Update active layer ID AFTER setting layers to ensure the state is updated correctly
+    // Use setTimeout to ensure this happens after the layer state is updated
     setTimeout(() => {
       setActiveLayerId(newLayerId);
       console.log("Active layer changed to:", newLayerId);
@@ -84,16 +89,23 @@ export const useLayerManager = () => {
       return;
     }
     
-    const updatedLayers = layers.filter(layer => layer.id !== layerId);
-    setLayers(updatedLayers);
+    setLayers(prevLayers => {
+      const updatedLayers = prevLayers.filter(layer => layer.id !== layerId);
+      return updatedLayers;
+    });
     
     // If active layer was removed, select another one
-    if (activeLayerId === layerId) {
-      setActiveLayerId(updatedLayers[0].id);
-    }
+    setActiveLayerId(prev => {
+      if (prev === layerId) {
+        // Find first available layer
+        const firstAvailableLayer = layers.find(l => l.id !== layerId);
+        return firstAvailableLayer?.id || layers[0].id;
+      }
+      return prev;
+    });
     
     toast("Calque supprimé");
-  }, [layers, activeLayerId]);
+  }, [layers]);
 
   const toggleLayerVisibility = useCallback((layerId: string) => {
     setLayers(prevLayers => prevLayers.map(layer => {
@@ -180,21 +192,12 @@ export const useLayerManager = () => {
   // Debugging effects
   useEffect(() => {
     console.log("Active layer changed to:", activeLayerId);
-    console.log("Current layers:", layers);
+    console.log("Current layers:", JSON.stringify(layers.map(l => ({
+      id: l.id,
+      name: l.name,
+      objectCount: l.objects?.length || 0,
+    }))));
   }, [activeLayerId, layers]);
-
-  // Add a useEffect to track layer object changes
-  useEffect(() => {
-    console.log("Layers state updated - objects per layer:",
-      layers.map(layer => ({
-        id: layer.id, 
-        name: layer.name,
-        objectCount: layer.objects?.length || 0,
-        visible: layer.visible,
-        locked: layer.locked
-      }))
-    );
-  }, [layers]);
 
   return {
     layers,
