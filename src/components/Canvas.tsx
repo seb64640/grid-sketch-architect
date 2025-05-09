@@ -129,13 +129,22 @@ export const Canvas: React.FC<CanvasProps> = ({
         console.log(`Removing canvas for deleted layer ${layerId}`);
         canvas.dispose();
         canvasesToRemove.push(layerId);
+        
+        // Supprimer aussi l'élément canvas du DOM
+        const canvasElement = layerCanvasRefs.current.get(layerId);
+        if (canvasElement && canvasElement.parentNode) {
+          canvasElement.parentNode.removeChild(canvasElement);
+        }
       }
     });
     
-    canvasesToRemove.forEach(id => fabricCanvasesRef.current.delete(id));
+    canvasesToRemove.forEach(id => {
+      fabricCanvasesRef.current.delete(id);
+      layerCanvasRefs.current.delete(id);
+    });
     
     // Créer ou configurer les canvas pour chaque calque
-    layers.forEach(layer => {
+    layers.forEach((layer, index) => {
       const existingCanvas = fabricCanvasesRef.current.get(layer.id);
       
       if (existingCanvas) {
@@ -147,6 +156,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         const canvasElement = layerCanvasRefs.current.get(layer.id);
         if (canvasElement) {
           canvasElement.style.display = layer.visible ? 'block' : 'none';
+          canvasElement.style.pointerEvents = layer.id === activeLayerId && !layer.locked ? 'auto' : 'none';
+          canvasElement.style.zIndex = `${index + 1}`;
         }
       } else {
         // Créer un nouveau canvas pour ce calque
@@ -161,6 +172,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         canvasElement.style.left = '0';
         canvasElement.style.pointerEvents = layer.id === activeLayerId && !layer.locked ? 'auto' : 'none';
         canvasElement.style.display = layer.visible ? 'block' : 'none';
+        canvasElement.style.zIndex = `${index + 1}`;
         canvasElement.id = `canvas-layer-${layer.id}`;
         canvasElement.dataset.layerId = layer.id;
         
@@ -184,22 +196,27 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Restaurer les objets du calque si présents
         if (layer.objects && layer.objects.length > 0) {
           console.log(`Restoring ${layer.objects.length} objects for layer ${layer.id}`);
-          layer.objects.forEach(obj => {
-            if (obj && typeof obj.set === 'function') {
-              // C'est un objet Fabric valide, l'ajouter au canvas
-              fabricCanvas.add(obj);
-            }
-          });
-          fabricCanvas.requestRenderAll();
-        }
-        
-        // Configurer les événements pour ce canvas
-        if (layer.id === activeLayerId) {
-          console.log(`Setting up events for active layer ${layer.id}`);
-          setupCanvasEvents(fabricCanvas, layer.id);
+          try {
+            layer.objects.forEach(obj => {
+              if (obj && typeof obj.set === 'function') {
+                // C'est un objet Fabric valide, l'ajouter au canvas
+                fabricCanvas.add(obj);
+              }
+            });
+            fabricCanvas.requestRenderAll();
+          } catch (error) {
+            console.error(`Error restoring objects for layer ${layer.id}:`, error);
+          }
         }
       }
     });
+    
+    // Configurer les événements pour le calque actif après que tous les canvas sont créés
+    const activeFabricCanvas = fabricCanvasesRef.current.get(activeLayerId);
+    if (activeFabricCanvas) {
+      console.log(`Setting up events for active layer ${activeLayerId}`);
+      setupCanvasEvents(activeFabricCanvas, activeLayerId);
+    }
     
     // Mettre à jour l'ordre d'empilement z-index
     layers.forEach((layer, index) => {
@@ -212,46 +229,54 @@ export const Canvas: React.FC<CanvasProps> = ({
     // Mettre la grille au-dessus de tout si visible
     if (gridCanvasRef.current) {
       gridCanvasRef.current.style.zIndex = `${layers.length + 1}`;
-      gridCanvasRef.current.style.display = gridVisible ? 'block' : 'none';
+      gridCanvasRef.current.style.display = gridVisible && !isPrintMode ? 'block' : 'none';
     }
   }, [layers, activeLayerId, width, height]);
 
   // Configurer les événements spécifiques à l'outil actif sur le canvas du calque actif
   useEffect(() => {
+    // Désactiver tous les événements sur tous les canvas d'abord
+    fabricCanvasesRef.current.forEach((canvas, layerId) => {
+      canvas.off('mouse:down');
+      canvas.off('mouse:move');
+      canvas.off('mouse:up');
+      
+      const canvasElement = layerCanvasRefs.current.get(layerId);
+      if (canvasElement) {
+        canvasElement.style.pointerEvents = 'none';
+      }
+      
+      canvas.selection = false;
+    });
+    
     const activeFabricCanvas = fabricCanvasesRef.current.get(activeLayerId);
     if (!activeFabricCanvas) {
       console.log(`No canvas found for active layer ${activeLayerId}`);
       return;
     }
     
-    // Mettre à jour le mode de sélection et les permissions
-    activeFabricCanvas.selection = activeTool === "select";
+    // Obtenir les informations sur le calque actif
+    const activeLayer = layers.find(l => l.id === activeLayerId);
+    if (!activeLayer) {
+      console.error(`Active layer ${activeLayerId} not found in layers array`);
+      return;
+    }
     
-    // Mettre à jour les interactions pour tous les canvas
-    fabricCanvasesRef.current.forEach((canvas, layerId) => {
-      // Désactiver les interactions pour les calques non actifs
-      if (layerId !== activeLayerId) {
-        const canvasElement = layerCanvasRefs.current.get(layerId);
-        if (canvasElement) {
-          canvasElement.style.pointerEvents = 'none';
-        }
-        canvas.selection = false;
-        canvas.off('mouse:down');
-        canvas.off('mouse:move');
-        canvas.off('mouse:up');
-      } else {
-        const canvasElement = layerCanvasRefs.current.get(layerId);
-        if (canvasElement) {
-          canvasElement.style.pointerEvents = 'auto';
-        }
-      }
-    });
+    // Activer les interactions sur le calque actif s'il n'est pas verrouillé
+    const canvasElement = layerCanvasRefs.current.get(activeLayerId);
+    if (canvasElement) {
+      // Activer les interactions seulement si le calque n'est pas verrouillé
+      canvasElement.style.pointerEvents = activeLayer.locked ? 'none' : 'auto';
+    }
+    
+    // Mettre à jour le mode de sélection
+    activeFabricCanvas.selection = activeTool === "select" && !activeLayer.locked;
     
     // Configurer les événements pour le calque actif
     setupCanvasEvents(activeFabricCanvas, activeLayerId);
     
-    console.log(`Updated canvas events for active layer ${activeLayerId} with tool ${activeTool}`);
-  }, [activeTool, activeLayerId, strokeColor, strokeWidth, fillColor, snapToGrid]);
+    console.log(`Updated canvas events for active layer ${activeLayerId} with tool ${activeTool}. Layer locked: ${activeLayer.locked}`);
+  }, [activeTool, activeLayerId, strokeColor, strokeWidth, fillColor, snapToGrid, layers]);
 
   // Mettre à jour la visibilité des calques
   useEffect(() => {
@@ -329,6 +354,25 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Configurer les événements spécifiques pour un canvas
   const setupCanvasEvents = (canvas: fabric.Canvas, layerId: string) => {
+    // Vérifier si le calque est verrouillé
+    const currentLayer = layers.find(l => l.id === layerId);
+    if (!currentLayer) {
+      console.error(`Layer ${layerId} not found when setting up events`);
+      return;
+    }
+    
+    if (currentLayer.locked) {
+      console.log(`Layer ${layerId} is locked, disabling interactions`);
+      canvas.selection = false;
+      canvas.defaultCursor = "not-allowed";
+      
+      // Désactiver tous les événements
+      canvas.off('mouse:down');
+      canvas.off('mouse:move');
+      canvas.off('mouse:up');
+      return;
+    }
+    
     // Réinitialiser tous les événements
     canvas.off('mouse:down');
     canvas.off('mouse:move');
@@ -415,6 +459,9 @@ export const Canvas: React.FC<CanvasProps> = ({
         });
       }
     }
+    
+    // Log des événements configurés
+    console.log(`Events set up for layer ${layerId} with tool ${activeTool}`);
   };
 
   // Dessiner la grille sur son propre canvas
@@ -696,6 +743,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       );
       
       canvas.add(line);
+      console.log("Line tool: Started drawing line");
       
       // Mettre à jour l'objet en cours de dessin
       setCurrentDrawingObjects({
@@ -741,6 +789,8 @@ export const Canvas: React.FC<CanvasProps> = ({
           evented: true,
           layerId: layerId
         });
+        
+        console.log("Line tool: Finished drawing line");
         
         // Mettre à jour la liste d'objets du calque
         const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
@@ -812,6 +862,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       });
       
       canvas.add(circle);
+      console.log("Circle tool: Started drawing circle");
       
       // Mettre à jour l'objet en cours de dessin
       setCurrentDrawingObjects({
@@ -859,6 +910,8 @@ export const Canvas: React.FC<CanvasProps> = ({
           evented: true,
           layerId: layerId
         });
+        
+        console.log("Circle tool: Finished drawing circle");
         
         // Mettre à jour la liste d'objets du calque
         const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
@@ -929,6 +982,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       });
       
       canvas.add(rect);
+      console.log("Rectangle tool: Started drawing rectangle");
       
       // Mettre à jour l'objet en cours de dessin
       setCurrentDrawingObjects({
@@ -977,6 +1031,8 @@ export const Canvas: React.FC<CanvasProps> = ({
           layerId: layerId
         });
         
+        console.log("Rectangle tool: Finished drawing rectangle");
+        
         // Mettre à jour la liste d'objets du calque
         const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
         updateLayerObjects(layerId, layerObjects);
@@ -1024,6 +1080,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.setActiveObject(text);
       text.enterEditing();
       text.selectAll();
+      
+      console.log("Text tool: Added text object");
       
       // Mettre à jour la liste d'objets du calque
       const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
@@ -1201,6 +1259,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       );
       
       canvas.add(arrowLine);
+      console.log("Arrow tool: Started drawing arrow");
       
       // Mettre à jour l'objet en cours de dessin
       setCurrentDrawingObjects({
@@ -1278,6 +1337,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Supprimer les objets individuels et ajouter le groupe
         canvas.remove(arrowLine, arrowHead);
         canvas.add(arrowGroup);
+        
+        console.log("Arrow tool: Finished drawing arrow");
         
         // Mettre à jour la liste d'objets du calque
         const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
