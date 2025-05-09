@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
 import { toast } from "sonner";
-import type { Layer } from "./GridSketch";
+import type { Layer } from "../hooks/useLayerManager";
 
 interface Point {
   x: number;
