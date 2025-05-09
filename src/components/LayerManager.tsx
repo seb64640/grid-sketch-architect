@@ -37,12 +37,14 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
   const handleAddLayer = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    console.log("Adding new layer");
+    console.log("Adding new layer from UI");
     addLayer();
   };
 
   // Get the active layer
   const activeLayer = layers.find(layer => layer.id === activeLayerId);
+
+  console.log("LayerManager rendering with active layer:", activeLayer?.name);
 
   return (
     <div className="mb-2 flex justify-between items-center">
@@ -57,7 +59,12 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
               <DropdownMenuItem
                 key={layer.id}
                 className={`flex items-center justify-between p-2 ${layer.id === activeLayerId ? 'bg-accent' : ''}`}
-                onClick={() => layer.id !== editingLayerId && setActiveLayerId(layer.id)}
+                onClick={() => {
+                  if (layer.id !== editingLayerId) {
+                    console.log(`Setting active layer to: ${layer.id} (${layer.name})`);
+                    setActiveLayerId(layer.id);
+                  }
+                }}
               >
                 {editingLayerId === layer.id ? (
                   <div className="flex items-center space-x-2 w-full">
@@ -71,7 +78,7 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
                           saveLayerName();
                         } else if (e.key === 'Escape') {
                           setEditLayerName("");
-                          startEditLayerName("", "");
+                          setEditingLayerId(null);
                         }
                       }}
                       onClick={(e) => e.stopPropagation()}
@@ -106,6 +113,7 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
+                          console.log(`Starting edit of layer name: ${layer.id} (${layer.name})`);
                           startEditLayerName(layer.id, layer.name);
                         }}
                         className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
@@ -116,6 +124,7 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
+                          console.log(`Toggling visibility for layer: ${layer.id} (${layer.name}), current: ${layer.visible}`);
                           toggleLayerVisibility(layer.id);
                         }}
                         className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
@@ -126,6 +135,7 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
+                          console.log(`Toggling lock for layer: ${layer.id} (${layer.name}), current: ${layer.locked}`);
                           toggleLayerLock(layer.id);
                         }}
                         className="text-xs px-1 py-0.5 hover:bg-gray-100 rounded"
@@ -136,6 +146,7 @@ export const LayerManager: React.FC<LayerManagerProps> = ({
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
+                          console.log(`Removing layer: ${layer.id} (${layer.name})`);
                           removeLayer(layer.id);
                         }}
                         className="text-xs text-red-500 px-1 py-0.5 hover:bg-red-50 rounded"

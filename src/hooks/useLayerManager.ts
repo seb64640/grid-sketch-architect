@@ -1,5 +1,5 @@
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 
 export interface Layer {
@@ -26,6 +26,9 @@ export const useLayerManager = () => {
   // Layer being edited state
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editLayerName, setEditLayerName] = useState("");
+  
+  // Reference to track if we're currently updating layers to avoid loops
+  const isUpdatingRef = useRef(false);
 
   // Helper function to generate unique layer name
   const generateUniqueLayerName = useCallback(() => {
@@ -56,12 +59,20 @@ export const useLayerManager = () => {
       objects: [] // Initialize with empty objects array
     };
     
-    // Add the layer directly without any setTimeout or complex logic
-    setLayers(prevLayers => [...prevLayers, newLayer]);
+    // Add the layer directly
+    setLayers(prevLayers => {
+      const updatedLayers = [...prevLayers, newLayer];
+      console.log("Layers after adding new layer:", JSON.stringify(updatedLayers.map(l => l.id)));
+      return updatedLayers;
+    });
+
+    // Set as active layer
     setActiveLayerId(newLayerId);
     
-    console.log("New layer added:", newLayerId);
+    console.log("New layer added:", newLayerId, newLayerName);
     toast(`Nouveau calque: ${newLayerName}`);
+    
+    return newLayerId; // Return the ID for immediate use if needed
   }, [generateUniqueLayerName]);
 
   const removeLayer = useCallback((layerId: string) => {
@@ -73,6 +84,7 @@ export const useLayerManager = () => {
     
     setLayers(prevLayers => {
       const updatedLayers = prevLayers.filter(layer => layer.id !== layerId);
+      console.log("Layers after removal:", JSON.stringify(updatedLayers.map(l => l.id)));
       return updatedLayers;
     });
     
@@ -81,50 +93,78 @@ export const useLayerManager = () => {
       if (prev === layerId) {
         // Find first available layer
         const firstAvailableLayer = layers.find(l => l.id !== layerId);
-        return firstAvailableLayer?.id || layers[0].id;
+        const newActiveId = firstAvailableLayer?.id || layers[0].id;
+        console.log("Active layer was removed, new active layer:", newActiveId);
+        return newActiveId;
       }
       return prev;
     });
     
-    toast("Calque supprimé");
+    const targetLayer = layers.find(layer => layer.id === layerId);
+    toast(`Calque ${targetLayer?.name || ''} supprimé`);
   }, [layers]);
 
   const toggleLayerVisibility = useCallback((layerId: string) => {
-    setLayers(prevLayers => prevLayers.map(layer => {
-      if (layer.id === layerId) {
-        const newVisibility = !layer.visible;
-        console.log(`Toggling visibility for layer ${layer.name} (${layer.id}) to ${newVisibility}`);
-        return {
-          ...layer,
-          visible: newVisibility
-        };
-      }
-      return layer;
-    }));
-    
     const targetLayer = layers.find(layer => layer.id === layerId);
-    toast(`Calque ${targetLayer?.name} ${!targetLayer?.visible ? "visible" : "masqué"}`);
+    const newVisibility = targetLayer ? !targetLayer.visible : true;
+    
+    console.log(`Toggling visibility for layer ${layerId} to ${newVisibility}`, 
+      targetLayer ? `(${targetLayer.name})` : '(layer not found)');
+    
+    setLayers(prevLayers => {
+      const updatedLayers = prevLayers.map(layer => {
+        if (layer.id === layerId) {
+          return {
+            ...layer,
+            visible: newVisibility
+          };
+        }
+        return layer;
+      });
+      
+      console.log("Layers after visibility toggle:", 
+        JSON.stringify(updatedLayers.map(l => ({id: l.id, visible: l.visible}))));
+      
+      return updatedLayers;
+    });
+    
+    if (targetLayer) {
+      toast(`Calque ${targetLayer.name} ${newVisibility ? "visible" : "masqué"}`);
+    }
   }, [layers]);
 
   const toggleLayerLock = useCallback((layerId: string) => {
-    setLayers(prevLayers => prevLayers.map(layer => {
-      if (layer.id === layerId) {
-        const newLockState = !layer.locked;
-        console.log(`Toggling lock for layer ${layer.name} (${layer.id}) to ${newLockState}`);
-        return {
-          ...layer,
-          locked: newLockState
-        };
-      }
-      return layer;
-    }));
-    
     const targetLayer = layers.find(layer => layer.id === layerId);
-    toast(`Calque ${targetLayer?.name} ${!targetLayer?.locked ? "verrouillé" : "déverrouillé"}`);
+    const newLockState = targetLayer ? !targetLayer.locked : false;
+    
+    console.log(`Toggling lock for layer ${layerId} to ${newLockState}`, 
+      targetLayer ? `(${targetLayer.name})` : '(layer not found)');
+    
+    setLayers(prevLayers => {
+      const updatedLayers = prevLayers.map(layer => {
+        if (layer.id === layerId) {
+          return {
+            ...layer,
+            locked: newLockState
+          };
+        }
+        return layer;
+      });
+      
+      console.log("Layers after lock toggle:", 
+        JSON.stringify(updatedLayers.map(l => ({id: l.id, locked: l.locked}))));
+      
+      return updatedLayers;
+    });
+    
+    if (targetLayer) {
+      toast(`Calque ${targetLayer.name} ${newLockState ? "verrouillé" : "déverrouillé"}`);
+    }
   }, [layers]);
 
   // Start editing a layer name
   const startEditLayerName = useCallback((layerId: string, currentName: string) => {
+    console.log(`Starting edit of layer name: ${layerId} (${currentName})`);
     setEditingLayerId(layerId);
     setEditLayerName(currentName);
   }, []);
@@ -132,6 +172,7 @@ export const useLayerManager = () => {
   // Save edited layer name
   const saveLayerName = useCallback(() => {
     if (!editingLayerId || editLayerName.trim() === "") {
+      console.log("Cannot save layer name: no editing ID or empty name");
       setEditingLayerId(null);
       return;
     }
@@ -149,24 +190,33 @@ export const useLayerManager = () => {
       if (!nameIsUnique) {
         // If not unique, generate a new unique name
         finalName = generateUniqueLayerName();
+        console.log(`Name not unique, generated new name: ${finalName}`);
       }
     }
 
+    console.log(`Saving layer name for ${editingLayerId}: ${finalName}`);
     renameLayer(editingLayerId, finalName);
     setEditingLayerId(null);
     setEditLayerName("");
   }, [editingLayerId, editLayerName, layers, generateUniqueLayerName]);
 
   const renameLayer = useCallback((layerId: string, newName: string) => {
-    setLayers(prevLayers => prevLayers.map(layer => {
-      if (layer.id === layerId) {
-        return {
-          ...layer,
-          name: newName
-        };
-      }
-      return layer;
-    }));
+    setLayers(prevLayers => {
+      const updatedLayers = prevLayers.map(layer => {
+        if (layer.id === layerId) {
+          return {
+            ...layer,
+            name: newName
+          };
+        }
+        return layer;
+      });
+      
+      console.log("Layers after rename:", 
+        JSON.stringify(updatedLayers.map(l => ({id: l.id, name: l.name}))));
+      
+      return updatedLayers;
+    });
     
     toast(`Calque renommé en: ${newName}`);
   }, []);
@@ -182,19 +232,58 @@ export const useLayerManager = () => {
     }))));
   }, [activeLayerId, layers]);
 
-  // Update layer objects without losing references
+  // Update layer objects with safety checks
   const updateLayerObjects = useCallback((layerId: string, objects: any[]) => {
-    setLayers(prevLayers => prevLayers.map(layer => {
-      if (layer.id === layerId) {
-        return {
-          ...layer,
-          objects: objects
-        };
-      }
-      return layer;
-    }));
-    console.log(`Updated objects for layer ${layerId}, count: ${objects.length}`);
-  }, []);
+    // Prevent recursive updates
+    if (isUpdatingRef.current) {
+      console.log("Preventing recursive update of layer objects");
+      return;
+    }
+    
+    // Find the layer to update
+    const layerExists = layers.some(layer => layer.id === layerId);
+    if (!layerExists) {
+      console.warn(`Attempted to update objects for non-existent layer: ${layerId}`);
+      return;
+    }
+    
+    console.log(`Updating objects for layer ${layerId}, count: ${objects.length}`);
+    
+    isUpdatingRef.current = true;
+    
+    setLayers(prevLayers => {
+      const updatedLayers = prevLayers.map(layer => {
+        if (layer.id === layerId) {
+          return {
+            ...layer,
+            objects: [...objects] // Create a new array to ensure proper state update
+          };
+        }
+        return layer;
+      });
+      
+      // Log the update for debugging
+      const updatedLayer = updatedLayers.find(l => l.id === layerId);
+      console.log(`Layer ${layerId} updated, objects count now: ${updatedLayer?.objects.length || 0}`);
+      
+      return updatedLayers;
+    });
+    
+    // Allow updates again after a short delay
+    setTimeout(() => {
+      isUpdatingRef.current = false;
+    }, 10);
+  }, [layers]);
+
+  // Get a specific layer by ID
+  const getLayerById = useCallback((layerId: string) => {
+    return layers.find(layer => layer.id === layerId);
+  }, [layers]);
+
+  // Get currently active layer
+  const getActiveLayer = useCallback(() => {
+    return layers.find(layer => layer.id === activeLayerId);
+  }, [layers, activeLayerId]);
 
   return {
     layers,
@@ -210,6 +299,8 @@ export const useLayerManager = () => {
     startEditLayerName,
     saveLayerName,
     setEditLayerName,
-    updateLayerObjects
+    updateLayerObjects,
+    getLayerById,
+    getActiveLayer
   };
 };

@@ -127,9 +127,9 @@ export const GridSketch = () => {
     toast(isPrintMode ? "Mode éditeur" : "Mode impression");
   };
 
-  // Log whenever layers change
+  // Log whenever layers change for debugging
   useEffect(() => {
-    console.log("Layer update effect triggered. Active layer:", layerManager.activeLayerId);
+    console.log("Layer update effect triggered in GridSketch. Active layer:", layerManager.activeLayerId);
     console.log("Layers state in GridSketch:", 
       layerManager.layers.map(l => ({
         id: l.id,
@@ -196,7 +196,7 @@ export const GridSketch = () => {
           layers={layerManager.layers}
           activeLayerId={layerManager.activeLayerId}
           setLayers={layerManager.setLayers}
-          updateLayerObjects={layerManager.updateLayerObjects} 
+          updateLayerObjects={layerManager.updateLayerObjects}
         />
       </div>
     </div>

@@ -26,7 +26,7 @@ interface CanvasProps {
   layers: Layer[];
   activeLayerId: string;
   setLayers: React.Dispatch<React.SetStateAction<Layer[]>>;
-  updateLayerObjects: (layerId: string, objects: any[]) => void; // Added this property
+  updateLayerObjects: (layerId: string, objects: any[]) => void;
 }
 
 type HistoryAction = {
