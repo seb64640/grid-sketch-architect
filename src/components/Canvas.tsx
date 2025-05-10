@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from "react";
 import { fabric } from "fabric";
 import type { Tool } from "./ToolBar";
@@ -78,6 +79,12 @@ export const Canvas: React.FC<CanvasProps> = ({
   const historyIndexRef = useRef<number>(-1);
   const isHistoryActionRef = useRef<boolean>(false);
   
+  // Flag pour suivre si la grille a été dessinée
+  const gridDrawnRef = useRef<boolean>(false);
+  
+  // Référence pour le flag de dessin en cours
+  const isDrawingRef = useRef<boolean>(false);
+  
   // Debug flag
   const debugMode = useRef<boolean>(true);
   
@@ -97,15 +104,32 @@ export const Canvas: React.FC<CanvasProps> = ({
   useEffect(() => {
     // Créer le canvas de grille
     if (gridCanvasRef.current && !gridFabricCanvasRef.current) {
+      // Configurer correctement les dimensions du canvas pour éviter le flou
+      const dpr = window.devicePixelRatio || 1;
+      const rect = gridCanvasRef.current.getBoundingClientRect();
+      
+      gridCanvasRef.current.width = width * dpr;
+      gridCanvasRef.current.height = height * dpr;
+      gridCanvasRef.current.style.width = `${width}px`;
+      gridCanvasRef.current.style.height = `${height}px`;
+      
       const gridCanvas = new fabric.Canvas(gridCanvasRef.current, {
-        width,
-        height,
+        width: width * dpr,
+        height: height * dpr,
         selection: false,
         backgroundColor: "transparent",
         renderOnAddRemove: false,
       });
+      
+      // Appliquer l'échelle pour compenser le devicePixelRatio
+      gridCanvas.setZoom(dpr);
       gridFabricCanvasRef.current = gridCanvas;
-      drawGrid();
+      
+      // Dessiner la grille seulement si elle n'a jamais été dessinée
+      if (!gridDrawnRef.current) {
+        drawGrid();
+        gridDrawnRef.current = true;
+      }
     }
     
     return () => {
@@ -148,6 +172,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       layerCanvasRefs.current.delete(id);
     });
     
+    const dpr = window.devicePixelRatio || 1;
+    
     // Créer ou configurer les canvas pour chaque calque
     layers.forEach((layer, index) => {
       const existingCanvas = fabricCanvasesRef.current.get(layer.id);
@@ -171,8 +197,12 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         // Créer l'élément canvas
         const canvasElement = document.createElement('canvas');
-        canvasElement.width = width;
-        canvasElement.height = height;
+        
+        // Configurer correctement les dimensions du canvas pour éviter le flou
+        canvasElement.width = width * dpr;
+        canvasElement.height = height * dpr;
+        canvasElement.style.width = `${width}px`;
+        canvasElement.style.height = `${height}px`;
         canvasElement.style.position = 'absolute';
         canvasElement.style.top = '0';
         canvasElement.style.left = '0';
@@ -187,14 +217,17 @@ export const Canvas: React.FC<CanvasProps> = ({
         
         // Créer une instance Fabric pour ce canvas
         const fabricCanvas = new fabric.Canvas(canvasElement, {
-          width,
-          height,
+          width: width * dpr,
+          height: height * dpr,
           selection: layer.id === activeLayerId && activeTool === "select" && !layer.locked,
           backgroundColor: "transparent",
           renderOnAddRemove: true,
           preserveObjectStacking: true,
           isDrawingMode: false,
         });
+        
+        // Appliquer l'échelle pour compenser le devicePixelRatio
+        fabricCanvas.setZoom(dpr);
         
         // Stocker les références
         layerCanvasRefs.current.set(layer.id, canvasElement);
@@ -247,6 +280,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.off('mouse:down');
       canvas.off('mouse:move');
       canvas.off('mouse:up');
+      canvas.off('mouse:out');
       
       const canvasElement = layerCanvasRefs.current.get(layerId);
       if (canvasElement) {
@@ -320,14 +354,34 @@ export const Canvas: React.FC<CanvasProps> = ({
     
     console.log(`Resizing all canvases to ${width}x${height}`);
     
+    const dpr = window.devicePixelRatio || 1;
+    
     // Mettre à jour les dimensions de tous les canvas
     fabricCanvasesRef.current.forEach((canvas, layerId) => {
-      canvas.setDimensions({ width, height });
+      // Mettre à jour les dimensions du canvas HTML
+      const canvasElement = layerCanvasRefs.current.get(layerId);
+      if (canvasElement) {
+        canvasElement.width = width * dpr;
+        canvasElement.height = height * dpr;
+        canvasElement.style.width = `${width}px`;
+        canvasElement.style.height = `${height}px`;
+      }
+      
+      canvas.setDimensions({ width: width * dpr, height: height * dpr });
+      canvas.setZoom(dpr);
     });
     
     // Mettre à jour le canvas de grille
-    if (gridFabricCanvasRef.current) {
-      gridFabricCanvasRef.current.setDimensions({ width, height });
+    if (gridFabricCanvasRef.current && gridCanvasRef.current) {
+      gridCanvasRef.current.width = width * dpr;
+      gridCanvasRef.current.height = height * dpr;
+      gridCanvasRef.current.style.width = `${width}px`;
+      gridCanvasRef.current.style.height = `${height}px`;
+      
+      gridFabricCanvasRef.current.setDimensions({ width: width * dpr, height: height * dpr });
+      gridFabricCanvasRef.current.setZoom(dpr);
+      
+      // Ne redessiner la grille que si les dimensions changent
       drawGrid();
     }
     
@@ -389,6 +443,7 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.off('mouse:down');
       canvas.off('mouse:move');
       canvas.off('mouse:up');
+      canvas.off('mouse:out');
       
       // Marquer comme configuré même s'il est verrouillé
       eventsConfiguredRef.current.add(layerId);
@@ -406,6 +461,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.off('mouse:down');
     canvas.off('mouse:move');
     canvas.off('mouse:up');
+    canvas.off('mouse:out');
     
     // Définir le curseur approprié
     switch (activeTool) {
@@ -512,8 +568,9 @@ export const Canvas: React.FC<CanvasProps> = ({
 
     const points = [];
     const cellSize = gridSize;
-    const cols = Math.floor(width / cellSize) + 1;
-    const rows = Math.floor(height / cellSize) + 1;
+    const dpr = window.devicePixelRatio || 1;
+    const cols = Math.floor((width * dpr) / cellSize) + 1;
+    const rows = Math.floor((height * dpr) / cellSize) + 1;
 
     // Créer les points de la grille
     for (let row = 0; row < rows; row++) {
@@ -724,11 +781,25 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, []);
 
+  // Gestionnaire commun pour mouse:up et mouse:out
+  const handleStopDrawing = (canvas: fabric.Canvas, layerId: string) => {
+    // Ne rien faire si nous n'étions pas en train de dessiner
+    if (!isDrawingRef.current) return;
+    
+    isDrawingRef.current = false;
+    
+    // Mettre à jour l'état pour indiquer que nous avons terminé le dessin
+    setCurrentDrawingObjects({ layerId: '', object: null });
+  };
+
   // Outil Ligne
   const setupLineTool = (canvas: fabric.Canvas, layerId: string) => {
     let line: fabric.Line | null = null;
     
     canvas.on("mouse:down", (o) => {
+      // Empêcher la sélection de texte
+      o.e.preventDefault();
+      
       // Vérifier si le calque est verrouillé
       const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
@@ -740,6 +811,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         toast.error("Le calque est verrouillé");
         return;
       }
+      
+      isDrawingRef.current = true;
       
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
@@ -788,7 +861,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
     
     canvas.on("mouse:move", (o) => {
-      if (!line || !startPointRef.current) return;
+      if (!line || !startPointRef.current || !isDrawingRef.current) return;
       
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
@@ -804,8 +877,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.requestRenderAll();
     });
     
-    canvas.on("mouse:up", () => {
-      if (!line || !startPointRef.current) return;
+    const handleMouseUp = () => {
+      if (!line || !startPointRef.current || !isDrawingRef.current) return;
+      
+      isDrawingRef.current = false;
       
       // Supprimer le point temporaire
       if (tempPointRef.current) {
@@ -839,7 +914,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       setCurrentDrawingObjects({ layerId: '', object: null });
       
       canvas.requestRenderAll();
-    });
+    };
+    
+    canvas.on("mouse:up", handleMouseUp);
+    canvas.on("mouse:out", handleMouseUp);
   };
 
   // Outil Cercle
@@ -847,6 +925,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     let circle: fabric.Circle | null = null;
     
     canvas.on("mouse:down", (o) => {
+      // Empêcher la sélection de texte
+      o.e.preventDefault();
+      
       // Vérifier si le calque est verrouillé
       const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
@@ -858,6 +939,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         toast.error("Le calque est verrouillé");
         return;
       }
+      
+      isDrawingRef.current = true;
       
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
@@ -910,7 +993,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
     
     canvas.on("mouse:move", (o) => {
-      if (!circle || !startPointRef.current) return;
+      if (!circle || !startPointRef.current || !isDrawingRef.current) return;
       
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
@@ -928,8 +1011,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.requestRenderAll();
     });
     
-    canvas.on("mouse:up", () => {
-      if (!circle || !startPointRef.current) return;
+    const handleMouseUp = () => {
+      if (!circle || !startPointRef.current || !isDrawingRef.current) return;
+      
+      isDrawingRef.current = false;
       
       // Supprimer le point temporaire
       if (tempPointRef.current) {
@@ -963,7 +1048,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       setCurrentDrawingObjects({ layerId: '', object: null });
       
       canvas.requestRenderAll();
-    });
+    };
+    
+    canvas.on("mouse:up", handleMouseUp);
+    canvas.on("mouse:out", handleMouseUp);
   };
   
   // Outil Rectangle
@@ -971,6 +1059,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     let rect: fabric.Rect | null = null;
     
     canvas.on("mouse:down", (o) => {
+      // Empêcher la sélection de texte
+      o.e.preventDefault();
+      
       // Vérifier si le calque est verrouillé
       const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
@@ -982,6 +1073,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         toast.error("Le calque est verrouillé");
         return;
       }
+      
+      isDrawingRef.current = true;
       
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
@@ -1035,7 +1128,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
     
     canvas.on("mouse:move", (o) => {
-      if (!rect || !startPointRef.current) return;
+      if (!rect || !startPointRef.current || !isDrawingRef.current) return;
       
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
@@ -1060,8 +1153,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.requestRenderAll();
     });
     
-    canvas.on("mouse:up", () => {
-      if (!rect || !startPointRef.current) return;
+    const handleMouseUp = () => {
+      if (!rect || !startPointRef.current || !isDrawingRef.current) return;
+      
+      isDrawingRef.current = false;
       
       // Supprimer le point temporaire
       if (tempPointRef.current) {
@@ -1095,12 +1190,18 @@ export const Canvas: React.FC<CanvasProps> = ({
       setCurrentDrawingObjects({ layerId: '', object: null });
       
       canvas.requestRenderAll();
-    });
+    };
+    
+    canvas.on("mouse:up", handleMouseUp);
+    canvas.on("mouse:out", handleMouseUp);
   };
   
   // Outil Texte
   const setupTextTool = (canvas: fabric.Canvas, layerId: string) => {
     canvas.on("mouse:down", (o) => {
+      // Empêcher la sélection de texte
+      o.e.preventDefault();
+      
       // Vérifier si le calque est verrouillé
       const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
@@ -1150,6 +1251,9 @@ export const Canvas: React.FC<CanvasProps> = ({
   // Outil Effacer
   const setupEraseTool = (canvas: fabric.Canvas, layerId: string) => {
     canvas.on("mouse:down", (o) => {
+      // Empêcher la sélection de texte
+      o.e.preventDefault();
+      
       // Vérifier si le calque est verrouillé
       const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
@@ -1192,6 +1296,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     let arrow: fabric.Triangle | null = null;
     
     canvas.on("mouse:down", (o) => {
+      // Empêcher la sélection de texte
+      o.e.preventDefault();
+      
       // Vérifier si le calque est verrouillé
       const currentLayer = layers.find(l => l.id === layerId);
       if (!currentLayer) {
@@ -1203,6 +1310,8 @@ export const Canvas: React.FC<CanvasProps> = ({
         toast.error("Le calque est verrouillé");
         return;
       }
+      
+      isDrawingRef.current = true;
       
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
@@ -1245,7 +1354,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     });
     
     canvas.on("mouse:move", (o) => {
-      if (!line || !startPointRef.current) return;
+      if (!line || !startPointRef.current || !isDrawingRef.current) return;
       
       const pointer = canvas.getPointer(o.e);
       const snappedPoint = snapToGridPoint({
@@ -1283,8 +1392,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.requestRenderAll();
     });
     
-    canvas.on("mouse:up", () => {
-      if (!line || !startPointRef.current || !arrow) return;
+    const handleMouseUp = () => {
+      if (!line || !startPointRef.current || !arrow || !isDrawingRef.current) return;
+      
+      isDrawingRef.current = false;
       
       // Supprimer le point temporaire
       if (tempPointRef.current) {
@@ -1325,7 +1436,10 @@ export const Canvas: React.FC<CanvasProps> = ({
       arrow = null;
       
       canvas.requestRenderAll();
-    });
+    };
+    
+    canvas.on("mouse:up", handleMouseUp);
+    canvas.on("mouse:out", handleMouseUp);
   };
   
   // Render les éléments du canvas
@@ -1333,7 +1447,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     <div 
       ref={canvasContainerRef} 
       className="relative w-full h-full bg-white overflow-hidden canvas-container"
-      style={{ border: '1px solid #ccc' }}
+      style={{ border: '1px solid #ccc', touchAction: 'none' }}
+      onContextMenu={(e) => e.preventDefault()} // Empêcher le menu contextuel
     >
       {/* Canvas pour la grille */}
       <canvas 
