@@ -942,4 +942,417 @@ export const Canvas: React.FC<CanvasProps> = ({
         // Rendre le cercle interactif
         circle.set({
           selectable: true,
-          event
+          evented: true,
+          layerId: layerId
+        });
+        
+        console.log("Circle tool: Finished drawing circle");
+        
+        // Mettre à jour la liste d'objets du calque - IMPORTANT POUR LA PERSISTANCE
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
+        
+        // Ajouter l'action à l'historique
+        saveHistoryState([circle], 'add', layerId);
+      }
+      
+      startPointRef.current = null;
+      setCurrentDrawingObjects({ layerId: '', object: null });
+      
+      canvas.requestRenderAll();
+    });
+  };
+
+  // Outil Rectangle
+  const setupRectangleTool = (canvas: fabric.Canvas, layerId: string) => {
+    let rect: fabric.Rect | null = null;
+    
+    canvas.on("mouse:down", (o) => {
+      const currentLayer = layers.find(l => l.id === layerId);
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
+      
+      if (currentLayer.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
+      const pointer = canvas.getPointer(o.e);
+      const snappedPoint = snapToGridPoint({
+        x: pointer.x,
+        y: pointer.y,
+      });
+      
+      startPointRef.current = snappedPoint;
+      
+      // Afficher un point temporaire
+      if (tempPointRef.current) {
+        canvas.remove(tempPointRef.current);
+      }
+      
+      tempPointRef.current = new fabric.Circle({
+        left: snappedPoint.x,
+        top: snappedPoint.y,
+        radius: 4,
+        fill: strokeColor,
+        originX: 'center',
+        originY: 'center',
+        selectable: false,
+      });
+      
+      canvas.add(tempPointRef.current);
+      
+      // Créer le rectangle
+      rect = new fabric.Rect({
+        left: snappedPoint.x,
+        top: snappedPoint.y,
+        width: 0,
+        height: 0,
+        stroke: strokeColor,
+        strokeWidth: strokeWidth,
+        fill: fillColor,
+        opacity: 0.5,
+        selectable: false,
+        evented: false,
+        originX: 'left',
+        originY: 'top',
+      });
+      
+      canvas.add(rect);
+      console.log("Rectangle tool: Started drawing rectangle");
+      
+      // Mettre à jour l'objet en cours de dessin
+      setCurrentDrawingObjects({
+        layerId,
+        object: rect
+      });
+    });
+    
+    canvas.on("mouse:move", (o) => {
+      if (!rect || !startPointRef.current) return;
+      
+      const pointer = canvas.getPointer(o.e);
+      const snappedPoint = snapToGridPoint({
+        x: pointer.x,
+        y: pointer.y,
+      });
+      
+      let width = snappedPoint.x - startPointRef.current.x;
+      let height = snappedPoint.y - startPointRef.current.y;
+      
+      // Ajuster le rectangle pour les valeurs négatives
+      if (width < 0) {
+        rect.set('left', snappedPoint.x);
+        width = Math.abs(width);
+      } else {
+        rect.set('left', startPointRef.current.x);
+      }
+      
+      if (height < 0) {
+        rect.set('top', snappedPoint.y);
+        height = Math.abs(height);
+      } else {
+        rect.set('top', startPointRef.current.y);
+      }
+      
+      rect.set({
+        width: width,
+        height: height
+      });
+      
+      canvas.requestRenderAll();
+    });
+    
+    canvas.on("mouse:up", () => {
+      if (!rect || !startPointRef.current) return;
+      
+      // Supprimer le point temporaire
+      if (tempPointRef.current) {
+        canvas.remove(tempPointRef.current);
+        tempPointRef.current = null;
+      }
+      
+      // Supprimer les rectangles de taille nulle
+      if (rect.width === 0 || rect.height === 0) {
+        canvas.remove(rect);
+        toast("Rectangle annulé - taille nulle");
+      } else {
+        // Rendre le rectangle interactif
+        rect.set({
+          selectable: true,
+          evented: true,
+          layerId: layerId
+        });
+        
+        console.log("Rectangle tool: Finished drawing rectangle");
+        
+        // Mettre à jour la liste d'objets du calque - IMPORTANT POUR LA PERSISTANCE
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
+        
+        // Ajouter l'action à l'historique
+        saveHistoryState([rect], 'add', layerId);
+      }
+      
+      startPointRef.current = null;
+      setCurrentDrawingObjects({ layerId: '', object: null });
+      
+      canvas.requestRenderAll();
+    });
+  };
+
+  // Outil Text
+  const setupTextTool = (canvas: fabric.Canvas, layerId: string) => {
+    canvas.on("mouse:down", (o) => {
+      const currentLayer = layers.find(l => l.id === layerId);
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
+      
+      if (currentLayer.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
+      const pointer = canvas.getPointer(o.e);
+      const snappedPoint = snapToGridPoint({
+        x: pointer.x,
+        y: pointer.y,
+      });
+      
+      const text = new fabric.IText("Texte", {
+        left: snappedPoint.x,
+        top: snappedPoint.y,
+        fontFamily: 'Arial',
+        fill: strokeColor,
+        fontSize: 20,
+        selectable: true,
+        layerId: layerId
+      });
+      
+      canvas.add(text);
+      canvas.setActiveObject(text);
+      text.enterEditing();
+      
+      console.log("Text tool: Added text object");
+      
+      // Mettre à jour l'objet en cours de dessin
+      setCurrentDrawingObjects({
+        layerId,
+        object: text
+      });
+      
+      // Mettre à jour la liste d'objets du calque
+      const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+      updateLayerObjects(layerId, layerObjects);
+      
+      // Ajouter l'action à l'historique
+      saveHistoryState([text], 'add', layerId);
+    });
+  };
+
+  // Outil Erase
+  const setupEraseTool = (canvas: fabric.Canvas, layerId: string) => {
+    canvas.on("mouse:down", (o) => {
+      const currentLayer = layers.find(l => l.id === layerId);
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
+      
+      if (currentLayer.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
+      const pointer = canvas.getPointer(o.e);
+      const objects = canvas.getObjects();
+      
+      // Rechercher les objets à proximité du clic
+      for (let i = objects.length - 1; i >= 0; i--) {
+        const obj = objects[i];
+        if (canvas.containsPoint(null, obj, pointer)) {
+          // Sauvegarder l'action avant la suppression
+          saveHistoryState([obj], 'remove', layerId);
+          
+          canvas.remove(obj);
+          console.log("Erase tool: Object erased");
+          
+          // Mettre à jour la liste d'objets du calque
+          const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+          updateLayerObjects(layerId, layerObjects);
+          
+          toast("Objet effacé");
+          break;
+        }
+      }
+    });
+  };
+
+  // Outil Arrow
+  const setupArrowTool = (canvas: fabric.Canvas, layerId: string) => {
+    let line: fabric.Line | null = null;
+    let arrowhead: fabric.Triangle | null = null;
+    
+    canvas.on("mouse:down", (o) => {
+      const currentLayer = layers.find(l => l.id === layerId);
+      if (!currentLayer) {
+        toast.error("Calque actif non trouvé");
+        return;
+      }
+      
+      if (currentLayer.locked) {
+        toast.error("Le calque est verrouillé");
+        return;
+      }
+      
+      const pointer = canvas.getPointer(o.e);
+      const snappedPoint = snapToGridPoint({
+        x: pointer.x,
+        y: pointer.y,
+      });
+      
+      startPointRef.current = snappedPoint;
+      
+      // Afficher un point temporaire
+      if (tempPointRef.current) {
+        canvas.remove(tempPointRef.current);
+      }
+      
+      tempPointRef.current = new fabric.Circle({
+        left: snappedPoint.x,
+        top: snappedPoint.y,
+        radius: 4,
+        fill: strokeColor,
+        originX: 'center',
+        originY: 'center',
+        selectable: false,
+      });
+      
+      canvas.add(tempPointRef.current);
+      
+      // Créer la ligne
+      line = new fabric.Line(
+        [snappedPoint.x, snappedPoint.y, snappedPoint.x, snappedPoint.y],
+        {
+          stroke: strokeColor,
+          strokeWidth: strokeWidth,
+          selectable: false,
+          evented: false,
+        }
+      );
+      
+      canvas.add(line);
+      console.log("Arrow tool: Started drawing arrow");
+      
+      // Mettre à jour l'objet en cours de dessin
+      setCurrentDrawingObjects({
+        layerId,
+        object: line
+      });
+    });
+    
+    canvas.on("mouse:move", (o) => {
+      if (!line || !startPointRef.current) return;
+      
+      const pointer = canvas.getPointer(o.e);
+      const snappedPoint = snapToGridPoint({
+        x: pointer.x,
+        y: pointer.y,
+      });
+      
+      // Mise à jour de la ligne
+      line.set({
+        x2: snappedPoint.x,
+        y2: snappedPoint.y,
+      });
+      
+      // Si une pointe de flèche existe, la supprimer
+      if (arrowhead) {
+        canvas.remove(arrowhead);
+      }
+      
+      // Calculer l'angle de la ligne pour orienter la pointe de flèche
+      const angle = Math.atan2(snappedPoint.y - line.y1!, snappedPoint.x - line.x1!) * 180 / Math.PI;
+      
+      // Créer une nouvelle pointe de flèche
+      arrowhead = new fabric.Triangle({
+        left: snappedPoint.x,
+        top: snappedPoint.y,
+        width: 15,
+        height: 15,
+        fill: strokeColor,
+        angle: angle + 90,
+        originX: 'center',
+        originY: 'center',
+        selectable: false,
+        evented: false,
+      });
+      
+      canvas.add(arrowhead);
+      canvas.requestRenderAll();
+    });
+    
+    canvas.on("mouse:up", () => {
+      if (!line || !startPointRef.current) return;
+      
+      // Supprimer le point temporaire
+      if (tempPointRef.current) {
+        canvas.remove(tempPointRef.current);
+        tempPointRef.current = null;
+      }
+      
+      // Supprimer les flèches de longueur nulle
+      if (line.x1 === line.x2 && line.y1 === line.y2) {
+        canvas.remove(line);
+        if (arrowhead) canvas.remove(arrowhead);
+        toast("Flèche annulée - longueur nulle");
+      } else {
+        // Grouper la ligne et la pointe de flèche pour créer une flèche complète
+        const arrow = new fabric.Group([line, arrowhead!], {
+          selectable: true,
+          evented: true,
+          layerId: layerId
+        });
+        
+        canvas.remove(line, arrowhead!);
+        canvas.add(arrow);
+        
+        console.log("Arrow tool: Finished drawing arrow");
+        
+        // Mettre à jour la liste d'objets du calque
+        const layerObjects = canvas.getObjects().filter(obj => obj !== tempPointRef.current);
+        updateLayerObjects(layerId, layerObjects);
+        
+        // Ajouter l'action à l'historique
+        saveHistoryState([arrow], 'add', layerId);
+      }
+      
+      line = null;
+      arrowhead = null;
+      startPointRef.current = null;
+      setCurrentDrawingObjects({ layerId: '', object: null });
+      
+      canvas.requestRenderAll();
+    });
+  };
+
+  return (
+    <div 
+      className="relative w-full h-full bg-white overflow-hidden"
+      ref={canvasContainerRef}
+    >
+      <canvas
+        ref={gridCanvasRef}
+        className="absolute top-0 left-0 w-full h-full pointer-events-none"
+        style={{
+          display: gridVisible && !isPrintMode ? "block" : "none",
+          zIndex: layers.length + 1
+        }}
+      />
+    </div>
+  );
+};
